@@ -125,7 +125,7 @@ def warn_missing_files(conn, data_dir):
     for (file_name,) in sorted(loaded):
         if file_name not in present:
             log.warning("%s was loaded in an earlier run but is no longer in %s; its records are kept",
-                        file_name, data_dir.name)
+                        file_name, display_path(data_dir))
 
 
 def check_freshness(conn, max_age_days):
@@ -189,7 +189,8 @@ def run_pipeline(config, data_dir=None, reset=False, simulate_failure=None):
     # Pessimistic default: if the run is interrupted (e.g. Ctrl+C), it is recorded as FAILED.
     status, error_message = "FAILED", "run interrupted"
     try:
-        log.info("===== Run %s started (data: %s) =====", run_id, display_path(data_dir))
+        log.info("===== Run %s started%s (data: %s) =====", run_id,
+                 " after --reset (run numbers restart at 1)" if reset else "", display_path(data_dir))
 
         # 1. Ingest + validate every file, parents before children.
         for table in config["tables"]:

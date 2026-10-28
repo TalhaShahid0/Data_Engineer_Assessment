@@ -25,4 +25,4 @@ tests/test_pipeline.py::test_missing_previously_loaded_file_is_reported PASSED [
 tests/test_pipeline.py::test_header_only_file_with_wrong_columns_fails PASSED [ 95%]
 tests/test_pipeline.py::test_recheck_never_overwrites_a_newer_identical_resend PASSED [100%]
 
-============================= 21 passed in 27.42s =============================
+============================= 21 passed in 27.57s =============================

@@ -284,7 +284,7 @@ Results: `outputs/test_results.txt` (21 passed).
 ## 8. Performance, observability and reliability
 
 Measured numbers are in `outputs/benchmark.txt`: a full run of the
-6-month sample (39,599 rows) takes **~11 s** on a laptop, and a rerun with
+6-month sample (39,599 rows) takes **~12 s** on a laptop, and a rerun with
 no new files **~2 s**. Everything below marked *proposal* is not
 implemented.
 
@@ -292,7 +292,7 @@ implemented.
 |---|---|---|
 | **Memory and partitioning** | One file is processed at a time; it is read fully into memory and sent to PostgreSQL with one `COPY`, so peak memory is about 6x the file size (measured once with a generated 82 MB, 1M-row file: ~530 MB; see `outputs/benchmark.txt`). Data is already split into monthly batches, which keeps files small. | Read files in chunks; range-partition `raw` and the fact tables by month so old partitions are untouched and can be archived. |
 | **SQL optimisation and indexing** | Primary keys on every business key; indexes on fact foreign keys and `order_date`; `(batch_id, row_num)` key on raw so each batch is read by index; unchanged rows skipped by `IS DISTINCT FROM`. | Check heavy queries with `EXPLAIN ANALYZE`; replace per-row PL/pgSQL safe casts (the main cost in validation) with set-based regex checks; rebuild only the affected months of metrics instead of all. |
-| **Batch or distributed processing** | Single-node batch is enough: the measured rate is ~5,000 rows/s for validation (a generated 1M-row file loaded in ~3 minutes, measured once) and the full public dataset is only ~4x the sample. | Spark or a cloud warehouse would only be justified at hundreds of millions of rows; the same layered design and SQL would carry over. |
+| **Batch or distributed processing** | Single-node batch is enough: the measured rate is ~4,500-5,500 rows/s for validation (varies between runs) (a generated 1M-row file loaded in ~3 minutes, measured once) and the full public dataset is only ~4x the sample. | Spark or a cloud warehouse would only be justified at hundreds of millions of rows; the same layered design and SQL would carry over. |
 | **Retry and controlled failure** | Downloads retry 3 times with backoff (2 s, 4 s). Data errors are never retried blindly: bad rows are rejected with a reason, bad files fail alone and are retried on the next run. | Scheduler-level retry of the whole run with a limit, then alert. |
 | **Structured logging and monitoring** | Every step logs timestamp, level, component, file, batch id, counts and duration to `outputs/logs/pipeline.log` and the console. Full history is queryable in `audit.pipeline_runs`, `audit.ingestion_log` and `audit.rejected_records`. | JSON log lines shipped to a log platform; a dashboard on the audit tables (rejection rate per rule, run duration). |
 | **Freshness and completion** | Run status (`SUCCESS`/`FAILED`) with file counts; reconciliation must pass; freshness check logs the newest order and warns when it is older than `monitoring.freshness_max_age_days` (disabled for this historical sample). | Expected-files check per day (e.g. alert if no orders file arrived). |

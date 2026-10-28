@@ -126,7 +126,7 @@ schtasks /create /tn "JaffleShopPipeline" /sc daily /st 02:00 /tr "cmd /c cd /d 
 or with cron on Linux/macOS: `0 2 * * * cd /path/to/Data_Engineer_Assessment && venv/bin/python -m src.pipeline.run_pipeline`.
 `PGPASSWORD` must be set for the account the task runs as.
 
-A full run of the sample takes about **11 seconds**; a rerun with nothing new about **2 seconds**.
+A full run of the sample takes about **12 seconds**; a rerun with nothing new about **2 seconds**.
 
 ### Outputs
 
@@ -143,7 +143,7 @@ file are evidence files produced once for this submission (sections 5 and 6).
 | `outputs/dq_summary.csv` | Count of records per table / category / rule |
 | `outputs/reconciliation.csv` | Per file: rows read = accepted + rejected, all rows reached raw |
 | `outputs/layer_reconciliation.csv` | 8 checks from staging to facts to metrics (all must pass) |
-| `outputs/logs/pipeline.log` | Run log (the committed log shows: clean run, rerun, failure, recovery, dirty file, final run) |
+| `outputs/logs/pipeline.log` | Run log (the committed log shows: clean run, rerun, failure, recovery, dirty file, final run). `--reset` restarts run numbers at 1, marked "after --reset" in the log |
 | `outputs/test_results.txt` | Output of the test suite |
 | `outputs/benchmark.txt` | Measured timings per step |
 | `outputs/demo_dirty_file_rejected_records.csv` | Rejected records from the dirty-file demo (section 6) |
@@ -269,8 +269,8 @@ SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 * Dimensions are SCD Type 1 (latest value only); history would need SCD Type 2 (design in the architecture doc).
 * Records deleted from the source are not detected (the source has no delete information); if a previously loaded file disappears from the data folder, the run logs a warning and keeps its records.
 * A file with the same name but new content is treated as a new batch; its records upsert over earlier versions (the most recently loaded file wins; an older batch never overwrites a newer one).
-* The checkpoint is by file **content**: a file whose exact content was loaded before is skipped. So if a file is changed and then changed back to an earlier version, the revert is skipped and the newer values stay. Run `--reset` in that case (a full reload takes ~11 s); production would use a per-file version or a change log from the source.
-* Changing `sql/schema.sql` or a data-quality rule only affects files loaded afterwards, because files already loaded are skipped. After such a change run `--reset` to rebuild everything (~11 s); production would use versioned migrations instead.
+* The checkpoint is by file **content**: a file whose exact content was loaded before is skipped. So if a file is changed and then changed back to an earlier version, the revert is skipped and the newer values stay. Run `--reset` in that case (a full reload takes ~12 s); production would use a per-file version or a change log from the source.
+* Changing `sql/schema.sql` or a data-quality rule only affects files loaded afterwards, because files already loaded are skipped. After such a change run `--reset` to rebuild everything (~12 s); production would use versioned migrations instead.
 * Batches with `INVESTIGATE` rows are re-checked on every run; with many permanently-invalid rows this should get an age limit.
 * An item held for an unknown product leaves its order's subtotal unmatched, so the reconciliation keeps the run `FAILED` until the item is resolved (intended: the data is incomplete).
 * Each file is read fully into memory before `COPY`: peak memory is about 6x the file size (measured once with a generated 1M-row, 82 MB file: ~530 MB). Fine for monthly files of a few MB; very large files should be read in chunks.
