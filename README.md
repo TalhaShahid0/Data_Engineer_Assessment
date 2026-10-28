@@ -250,6 +250,15 @@ SELECT * FROM staging.orders        WHERE order_id = '<order id>';
 SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 ```
 
+* Every run writes one `audit.ingestion_log` row per file, including files it
+  skipped, so batch ids keep increasing across runs (e.g. after the demos a new
+  file may get batch 44). This is expected; the file's `SUCCESS` row is the
+  batch that actually loaded its data.
+* `staging` and `analytics` only contain valid UUIDs, so the last two trace
+  queries return an error for a malformed id such as `not-a-uuid`. Such records
+  never got past validation: look them up in `raw.orders` and
+  `audit.rejected_records` instead.
+
 ### Known limitations
 
 * Only 6 months of the public data are used (enough to show every behaviour; the full dataset is ~4x larger, estimated ~40 s per full run - see `outputs/benchmark.txt`).
