@@ -89,19 +89,26 @@ def check_header(header, table):
 
 def ingest_file(conn, run_id, table, path, file_hash):
     """Load one file into raw.<table>. Returns a dict with batch_id, status, rows_read."""
+    # Blank lines are skipped; a line of only separators (",,,") is kept so that
+    # the data-quality rules reject it as missing values.
     with open(path, newline="", encoding="utf-8-sig") as f:
-        records = [row for row in csv.reader(f) if any(field.strip() for field in row)]
+        records = [row for row in csv.reader(f) if len(row) > 1 or (row and row[0].strip())]
 
     header = [col.strip().lower() for col in records[0]] if records else []
     rows = records[1:]
 
-    if not header or not rows:
-        batch_id = log_batch(conn, run_id, table["name"], path.name, file_hash, "EMPTY",
-                             "file is empty" if not header else "file has a header but no rows")
+    if not header:
+        batch_id = log_batch(conn, run_id, table["name"], path.name, file_hash, "EMPTY", "file is empty")
         log.warning("%s: %s is empty, nothing to load", table["name"], path.name)
         return {"batch_id": batch_id, "status": "EMPTY", "rows_read": 0}
 
-    columns = check_header(header, table)
+    columns = check_header(header, table)   # also for header-only files
+    if not rows:
+        batch_id = log_batch(conn, run_id, table["name"], path.name, file_hash, "EMPTY",
+                             "file has a header but no rows")
+        log.warning("%s: %s has no data rows, nothing to load", table["name"], path.name)
+        return {"batch_id": batch_id, "status": "EMPTY", "rows_read": 0}
+
     batch_id = log_batch(conn, run_id, table["name"], path.name, file_hash, "RUNNING")
 
     # Build an in-memory CSV for COPY; set malformed rows aside.

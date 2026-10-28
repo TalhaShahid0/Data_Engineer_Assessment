@@ -11,22 +11,22 @@ ingest + validate: stores                  1        6     0.04     150
 ingest + validate: customers               1      930     0.11    8454
 ingest + validate: products                1       10     0.02     500
 ingest + validate: supplies                1       65     0.02    3250
-ingest + validate: orders                  6    15774     3.80    4151
-ingest + validate: items                   6    22814     2.90    7866
-ingest + validate: all files              16    39599     6.89    5747
-transformations (facts + metrics)                         3.24
-TOTAL run (incl. exports, connect)                       10.57
+ingest + validate: orders                  6    15774     4.25    3711
+ingest + validate: items                   6    22814     3.67    6216
+ingest + validate: all files              16    39599     8.11    4882
+transformations (facts + metrics)                         2.95
+TOTAL run (incl. exports, connect)                       11.48
 
 Rerun with no new files (all 16 skipped by checkpoint)
 --------------------------------------------------------------------
-TOTAL run                                                 1.50
+TOTAL run                                                 1.90
 
 Database size after the run
 --------------------------------------------------------------------
 analytics                                                      7040 kB
 audit                                                           192 kB
-raw                                                            8584 kB
-staging                                                        5640 kB
+raw                                                            8592 kB
+staging                                                        5648 kB
 
 Volume test (MEASURED ONCE, test database; generated file, generator not included)
 --------------------------------------------------------------------

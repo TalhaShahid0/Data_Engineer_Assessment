@@ -4,7 +4,7 @@ All rules live in sql/data_quality.sql; this module only runs that file for a
 batch, reads back the batch statistics and writes the report CSVs.
 validate_batch() does NOT commit: the caller owns the transaction.
 """
-from src.pipeline.db import PROJECT_ROOT, export_query_to_csv, fetch_all, run_sql_file
+from src.pipeline.db import PROJECT_ROOT, display_path, export_query_to_csv, fetch_all, run_sql_file
 from src.pipeline.logger import get_logger
 
 log = get_logger("validate")
@@ -63,4 +63,4 @@ def export_reports(conn, out_dir):
         "SELECT * FROM audit.batch_reconciliation",
         out_dir / "reconciliation.csv",
     )
-    log.info("Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to %s", out_dir)
+    log.info("Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to %s", display_path(out_dir))

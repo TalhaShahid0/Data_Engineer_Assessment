@@ -8,6 +8,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 
 
+def display_path(path):
+    """Path relative to the project folder for log messages (absolute if outside it)."""
+    try:
+        return str(Path(path).resolve().relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def load_config(path=CONFIG_PATH):
     """Read config/config.yaml and return it as a dict."""
     with open(path, encoding="utf-8") as f:

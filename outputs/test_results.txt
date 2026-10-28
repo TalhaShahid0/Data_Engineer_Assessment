@@ -1,26 +1,28 @@
 ﻿============================= test session starts =============================
 platform win32 -- Python 3.12.10, pytest-8.3.4, pluggy-1.7.0 -- C:\Users\Talha\Desktop\Data_Engineer_Assessment\venv\Scripts\python.exe
 rootdir: C:\Users\Talha\Desktop\Data_Engineer_Assessment
-collecting ... collected 19 items
+collecting ... collected 21 items
 
-tests/test_pipeline.py::test_file_missing_required_column_is_rejected PASSED [  5%]
-tests/test_pipeline.py::test_invalid_rows_are_rejected_with_rule_and_category PASSED [ 10%]
-tests/test_pipeline.py::test_corrected_record_updates_instead_of_duplicating PASSED [ 15%]
-tests/test_pipeline.py::test_no_orphan_records_reach_the_facts PASSED    [ 21%]
-tests/test_pipeline.py::test_reconciliation_balances_with_rejected_rows PASSED [ 26%]
-tests/test_pipeline.py::test_metrics_match_hand_calculated_values PASSED [ 31%]
-tests/test_pipeline.py::test_rerun_skips_loaded_files_and_changes_nothing PASSED [ 36%]
-tests/test_pipeline.py::test_failed_file_is_rolled_back_and_recovered_on_next_run PASSED [ 42%]
-tests/test_pipeline.py::test_empty_file_is_logged_and_does_not_fail_the_run PASSED [ 47%]
-tests/test_pipeline.py::test_correction_is_not_undone_by_recheck_of_older_batch PASSED [ 52%]
-tests/test_pipeline.py::test_same_uuid_in_different_spelling_is_a_duplicate PASSED [ 57%]
-tests/test_pipeline.py::test_out_of_range_values_are_rejected_without_failing_the_file PASSED [ 63%]
-tests/test_pipeline.py::test_blank_lines_are_ignored PASSED              [ 68%]
-tests/test_pipeline.py::test_duplicate_header_column_fails_the_file PASSED [ 73%]
-tests/test_pipeline.py::test_unreadable_file_fails_only_that_file PASSED [ 78%]
-tests/test_pipeline.py::test_second_run_is_refused_while_one_is_in_progress PASSED [ 84%]
-tests/test_pipeline.py::test_interrupted_run_is_recorded_as_failed PASSED [ 89%]
-tests/test_pipeline.py::test_unreachable_database_gives_a_clear_error PASSED [ 94%]
-tests/test_pipeline.py::test_missing_previously_loaded_file_is_reported PASSED [100%]
+tests/test_pipeline.py::test_file_missing_required_column_is_rejected PASSED [  4%]
+tests/test_pipeline.py::test_invalid_rows_are_rejected_with_rule_and_category PASSED [  9%]
+tests/test_pipeline.py::test_corrected_record_updates_instead_of_duplicating PASSED [ 14%]
+tests/test_pipeline.py::test_no_orphan_records_reach_the_facts PASSED    [ 19%]
+tests/test_pipeline.py::test_reconciliation_balances_with_rejected_rows PASSED [ 23%]
+tests/test_pipeline.py::test_metrics_match_hand_calculated_values PASSED [ 28%]
+tests/test_pipeline.py::test_rerun_skips_loaded_files_and_changes_nothing PASSED [ 33%]
+tests/test_pipeline.py::test_failed_file_is_rolled_back_and_recovered_on_next_run PASSED [ 38%]
+tests/test_pipeline.py::test_empty_file_is_logged_and_does_not_fail_the_run PASSED [ 42%]
+tests/test_pipeline.py::test_correction_is_not_undone_by_recheck_of_older_batch PASSED [ 47%]
+tests/test_pipeline.py::test_same_uuid_in_different_spelling_is_a_duplicate PASSED [ 52%]
+tests/test_pipeline.py::test_out_of_range_values_are_rejected_without_failing_the_file PASSED [ 57%]
+tests/test_pipeline.py::test_blank_lines_are_ignored PASSED              [ 61%]
+tests/test_pipeline.py::test_duplicate_header_column_fails_the_file PASSED [ 66%]
+tests/test_pipeline.py::test_unreadable_file_fails_only_that_file PASSED [ 71%]
+tests/test_pipeline.py::test_second_run_is_refused_while_one_is_in_progress PASSED [ 76%]
+tests/test_pipeline.py::test_interrupted_run_is_recorded_as_failed PASSED [ 80%]
+tests/test_pipeline.py::test_unreachable_database_gives_a_clear_error PASSED [ 85%]
+tests/test_pipeline.py::test_missing_previously_loaded_file_is_reported PASSED [ 90%]
+tests/test_pipeline.py::test_header_only_file_with_wrong_columns_fails PASSED [ 95%]
+tests/test_pipeline.py::test_recheck_never_overwrites_a_newer_identical_resend PASSED [100%]
 
-============================= 19 passed in 22.68s =============================
+============================= 21 passed in 27.42s =============================

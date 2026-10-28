@@ -27,7 +27,7 @@ from pathlib import Path
 import psycopg2
 
 from src.ingestion.ingest import already_loaded, file_sha256, ingest_file, log_batch
-from src.pipeline.db import PROJECT_ROOT, fetch_all, get_connection, load_config, run_sql_file
+from src.pipeline.db import PROJECT_ROOT, display_path, fetch_all, get_connection, load_config, run_sql_file
 from src.pipeline.logger import get_logger
 from src.transformation.transform import export_metrics, run_transformations
 from src.validation.validate import export_reports, validate_batch
@@ -97,14 +97,17 @@ def process_file(conn, run_id, table, path, simulate_failure=None):
         return "FAILED"
 
 
-def retry_quarantined(conn, table_order):
-    """Re-check batches that still hold INVESTIGATE rows (e.g. late-arriving parents)."""
+def retry_quarantined(conn, run_id, table_order):
+    """Re-check batches from earlier runs that still hold INVESTIGATE rows
+    (e.g. late-arriving parents). Batches of this run were just validated, after
+    their parent tables, so re-checking them again would change nothing."""
     batches = fetch_all(
         conn,
         """SELECT DISTINCT r.batch_id, r.table_name, l.rows_rejected
            FROM audit.rejected_records r
            JOIN audit.ingestion_log l ON l.batch_id = r.batch_id AND l.status = 'SUCCESS'
-           WHERE r.category = 'INVESTIGATE'""",
+           WHERE r.category = 'INVESTIGATE' AND l.run_id <> %s""",
+        (run_id,),
     )
     for batch_id, table_name, rejected_before in sorted(batches, key=lambda b: (table_order.index(b[1]), b[0])):
         rejected_after = validate_batch(conn, batch_id, recheck=True)["rows_rejected"]
@@ -186,7 +189,7 @@ def run_pipeline(config, data_dir=None, reset=False, simulate_failure=None):
     # Pessimistic default: if the run is interrupted (e.g. Ctrl+C), it is recorded as FAILED.
     status, error_message = "FAILED", "run interrupted"
     try:
-        log.info("===== Run %s started (data: %s) =====", run_id, data_dir)
+        log.info("===== Run %s started (data: %s) =====", run_id, display_path(data_dir))
 
         # 1. Ingest + validate every file, parents before children.
         for table in config["tables"]:
@@ -196,7 +199,7 @@ def run_pipeline(config, data_dir=None, reset=False, simulate_failure=None):
         warn_missing_files(conn, data_dir)
 
         # 2. Re-check rows that were waiting for a parent record.
-        retry_quarantined(conn, table_order)
+        retry_quarantined(conn, run_id, table_order)
 
         # 3. Build the analytics layer and verify it (one transaction).
         started = time.perf_counter()

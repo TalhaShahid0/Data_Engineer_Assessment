@@ -4,7 +4,7 @@ All transformation logic lives in sql/transformations.sql; this module runs
 it, checks the layer reconciliation and writes the CSV outputs.
 run_transformations() does NOT commit: the caller owns the transaction.
 """
-from src.pipeline.db import PROJECT_ROOT, export_query_to_csv, fetch_all, run_sql_file
+from src.pipeline.db import PROJECT_ROOT, display_path, export_query_to_csv, fetch_all, run_sql_file
 from src.pipeline.logger import get_logger
 
 log = get_logger("transform")
@@ -48,4 +48,4 @@ def export_metrics(conn, out_dir):
         )
     export_query_to_csv(conn, "SELECT * FROM audit.layer_reconciliation",
                         out_dir / "layer_reconciliation.csv")
-    log.info("Exported metric CSVs to %s", out_dir / "metrics")
+    log.info("Exported metric CSVs to %s", display_path(out_dir / "metrics"))

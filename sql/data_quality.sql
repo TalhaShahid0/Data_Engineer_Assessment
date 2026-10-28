@@ -12,7 +12,9 @@
 --                  EXCEPTION   -> legitimate but unusual business case; loaded and flagged
 --   2. STAGING : rows without INVALID/INVESTIGATE rejections are typed, cleaned
 --                and upserted (ON CONFLICT) so reprocessing never duplicates.
---                Unchanged rows are left untouched (IS DISTINCT FROM).
+--                A row is only rewritten by the same or a newer batch, and only
+--                when a value or its batch changed (IS DISTINCT FROM), so each row
+--                always records the newest batch that delivered it.
 --
 -- Cleaning applied: whitespace (incl. tabs) collapsed and trimmed in names, ids lower-case
 -- UUIDs, SKUs upper-case, product types lower-case, cents converted to dollars.
@@ -74,8 +76,8 @@ SET store_name = EXCLUDED.store_name,
     batch_id   = EXCLUDED.batch_id,
     updated_at = now()
 WHERE staging.stores.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND (staging.stores.store_name, staging.stores.opened_at, staging.stores.tax_rate)
-      IS DISTINCT FROM (EXCLUDED.store_name, EXCLUDED.opened_at, EXCLUDED.tax_rate);
+  AND (staging.stores.batch_id, staging.stores.store_name, staging.stores.opened_at, staging.stores.tax_rate)
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.store_name, EXCLUDED.opened_at, EXCLUDED.tax_rate);
 
 
 -- =====================================================================
@@ -115,7 +117,8 @@ SET customer_name = EXCLUDED.customer_name,
     batch_id      = EXCLUDED.batch_id,
     updated_at    = now()
 WHERE staging.customers.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND staging.customers.customer_name IS DISTINCT FROM EXCLUDED.customer_name;
+  AND (staging.customers.batch_id, staging.customers.customer_name)
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.customer_name);
 
 
 -- =====================================================================
@@ -168,9 +171,9 @@ SET product_name = EXCLUDED.product_name,
     batch_id     = EXCLUDED.batch_id,
     updated_at   = now()
 WHERE staging.products.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND (staging.products.product_name, staging.products.product_type,
+  AND (staging.products.batch_id, staging.products.product_name, staging.products.product_type,
        staging.products.price, staging.products.description)
-      IS DISTINCT FROM (EXCLUDED.product_name, EXCLUDED.product_type,
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.product_name, EXCLUDED.product_type,
                         EXCLUDED.price, EXCLUDED.description);
 
 
@@ -230,8 +233,8 @@ SET supply_name   = EXCLUDED.supply_name,
     batch_id      = EXCLUDED.batch_id,
     updated_at    = now()
 WHERE staging.supplies.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND (staging.supplies.supply_name, staging.supplies.cost, staging.supplies.is_perishable)
-      IS DISTINCT FROM (EXCLUDED.supply_name, EXCLUDED.cost, EXCLUDED.is_perishable);
+  AND (staging.supplies.batch_id, staging.supplies.supply_name, staging.supplies.cost, staging.supplies.is_perishable)
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.supply_name, EXCLUDED.cost, EXCLUDED.is_perishable);
 
 
 -- =====================================================================
@@ -322,9 +325,9 @@ SET customer_id = EXCLUDED.customer_id,
     batch_id    = EXCLUDED.batch_id,
     updated_at  = now()
 WHERE staging.orders.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND (staging.orders.customer_id, staging.orders.store_id, staging.orders.ordered_at,
+  AND (staging.orders.batch_id, staging.orders.customer_id, staging.orders.store_id, staging.orders.ordered_at,
        staging.orders.subtotal, staging.orders.tax_paid, staging.orders.order_total)
-      IS DISTINCT FROM (EXCLUDED.customer_id, EXCLUDED.store_id, EXCLUDED.ordered_at,
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.customer_id, EXCLUDED.store_id, EXCLUDED.ordered_at,
                         EXCLUDED.subtotal, EXCLUDED.tax_paid, EXCLUDED.order_total);
 
 
@@ -375,8 +378,8 @@ SET order_id   = EXCLUDED.order_id,
     batch_id   = EXCLUDED.batch_id,
     updated_at = now()
 WHERE staging.items.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
-  AND (staging.items.order_id, staging.items.sku)
-      IS DISTINCT FROM (EXCLUDED.order_id, EXCLUDED.sku);
+  AND (staging.items.batch_id, staging.items.order_id, staging.items.sku)
+      IS DISTINCT FROM (EXCLUDED.batch_id, EXCLUDED.order_id, EXCLUDED.sku);
 
 
 -- =====================================================================

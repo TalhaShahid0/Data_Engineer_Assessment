@@ -323,15 +323,17 @@ def test_out_of_range_values_are_rejected_without_failing_the_file(run, data_dir
 
 
 def test_blank_lines_are_ignored(run, data_dir, db):
-    """Blank lines before the header or after the data do not lose or reject rows."""
+    """Blank lines before the header or after the data do not lose or reject rows;
+    a line of only separators is a row of empty values and is rejected."""
     (data_dir / "orders_2017_03.csv").write_text(
-        "\n\n" + ORDER_HEADER + order_row("dddddddd-0000-0000-0000-000000000100") + "\n\n"
+        "\n\n" + ORDER_HEADER + order_row("dddddddd-0000-0000-0000-000000000100") + ",,,,,,\n" + "\n\n"
     )
 
     run(data_dir, reset=True)
 
     assert query(db, "SELECT status, rows_read, rows_accepted, rows_rejected FROM audit.ingestion_log "
-                     "WHERE file_name = 'orders_2017_03.csv'") == [("SUCCESS", 1, 1, 0)]
+                     "WHERE file_name = 'orders_2017_03.csv'") == [("SUCCESS", 2, 1, 1)]
+    assert query(db, "SELECT row_num, rule_name FROM audit.rejected_records") == [(2, "missing_required")]
 
 
 def test_duplicate_header_column_fails_the_file(run, data_dir, db):
@@ -414,3 +416,33 @@ def test_missing_previously_loaded_file_is_reported(run, data_dir, db, caplog):
     assert result["status"] == "SUCCESS"
     assert "items_2017_02.csv was loaded in an earlier run but is no longer in" in caplog.text
     assert scalar(db, "SELECT count(*) FROM analytics.fct_order_items") == 4
+
+
+def test_header_only_file_with_wrong_columns_fails(run, data_dir, db):
+    """A file with no data rows still has its header checked."""
+    (data_dir / "items_2017_03.csv").write_text("id,order_id\n")              # sku column missing
+
+    run(data_dir, reset=True)
+
+    status, error = query(db, "SELECT status, error_message FROM audit.ingestion_log "
+                              "WHERE file_name = 'items_2017_03.csv'")[0]
+    assert status == "FAILED" and "sku" in error
+
+
+def test_recheck_never_overwrites_a_newer_identical_resend(run, data_dir, db):
+    """Order 110 is held in one batch (unknown customer) and later re-sent unchanged by a
+    newer batch. When the customer arrives, the re-check of the older held row must not
+    overwrite the newer version."""
+    key = "dddddddd-0000-0000-0000-000000000110"
+    newcomer = "cccccccc-0000-0000-0000-000000000110"
+    (data_dir / "orders_2017_03.csv").write_text(ORDER_HEADER + order_row(key))   # Alice
+    run(data_dir, reset=True)
+    (data_dir / "orders_2017_04.csv").write_text(ORDER_HEADER + order_row(key, customer=newcomer))  # held
+    (data_dir / "orders_2017_05.csv").write_text(                                # newer: 110 unchanged
+        ORDER_HEADER + order_row(key) + order_row("dddddddd-0000-0000-0000-000000000111"))
+    run(data_dir)
+    (data_dir / "raw_customers.csv").write_text(
+        (data_dir / "raw_customers.csv").read_text() + f"{newcomer},New Customer\n")
+    run(data_dir)                                                                 # re-check of the held row
+
+    assert scalar(db, f"SELECT customer_id::text FROM analytics.fct_orders WHERE order_id = '{key}'") == ALICE

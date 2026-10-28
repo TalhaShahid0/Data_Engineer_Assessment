@@ -16,7 +16,7 @@ tables.
 | **PostgreSQL** | Real primary/foreign keys, CHECK constraints, transactions and `ON CONFLICT` upserts, which are what make the pipeline safe to rerun. Free, runs locally. |
 | **SQL for the logic** | Data-quality rules, cleaning, upserts, metrics and reconciliation are all SQL (`sql/`), so the rules are readable in one place and run inside the database, next to the data. |
 | **Python as thin glue** | Downloads files, checks headers, bulk-loads with `COPY`, runs the SQL files in order, records checkpoints and logs. No pandas: the data never needs to be held in Python. |
-| **No orchestrator / dbt / Docker** | One command runs everything. For six source files and a few seconds of processing, Airflow or dbt would add setup without adding reliability. Section 8 explains how it would be scheduled. |
+| **No orchestrator / dbt / Docker** | One command runs everything. For 16 small files from 6 source tables and a few seconds of processing, Airflow or dbt would add setup without adding reliability. Section 8 explains how it would be scheduled. |
 
 ---
 
@@ -37,12 +37,12 @@ flowchart LR
 | Layer | Component | Where |
 |---|---|---|
 | Source and ingestion | Download with retries; per-file header check; `COPY` into raw | `src/ingestion/` |
-| Raw storage | One table per source, every expected column as `TEXT`, plus `batch_id`, `source_file`, `row_num`, `loaded_at`. Bad values are stored as received, so any batch can be re-processed from here; rows with the wrong number of fields are kept as JSON in `audit.rejected_records`, and unexpected extra columns are ignored (with a warning). | `raw` schema |
+| Raw storage | One table per source, every expected column as `TEXT`, plus `batch_id`, `source_file`, `row_num`, `loaded_at`. Bad values are stored as received, so a batch can be re-validated from here (done automatically for batches with held rows); the source CSVs remain the recoverable copy; rows with the wrong number of fields are kept as JSON in `audit.rejected_records`, and unexpected extra columns are ignored (with a warning). | `raw` schema |
 | Validation | SQL rules write failures to `audit.rejected_records`; clean rows are cast and upserted into staging | `sql/data_quality.sql`, `src/validation/` |
 | Transformation | Dimensions and facts upserted from staging; metrics rebuilt | `sql/transformations.sql`, `src/transformation/` |
 | Target | Star schema + metric tables | `analytics` schema |
 | Orchestration | One CLI; per-file transactions; checkpoint by file hash; scheduled with Windows Task Scheduler or cron (example in the README) | `src/pipeline/run_pipeline.py` |
-| Testing | 19 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
+| Testing | 21 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
 | Logging and monitoring | Log file + console; run and file history in `audit`; reconciliation views; freshness check; exit code 1 on failure | `src/pipeline/logger.py`, `audit` schema |
 
 **Order of work in one run**
@@ -64,7 +64,7 @@ flowchart LR
 |---|---|---|
 | `raw` | Exact copy of each file, all `TEXT` | `(batch_id, row_num)` |
 | `staging` | Typed, cleaned, one row per business key | business key (e.g. `order_id`) |
-| `analytics` | Star schema and metrics, with enforced foreign keys | surrogate-free: business keys are stable UUIDs |
+| `analytics` | Star schema and metrics, with enforced foreign keys | no surrogate keys: the stable business keys (UUIDs, product SKU) are used |
 | `audit` | Runs, file log, rejected records, reconciliation views | `run_id`, `batch_id` |
 
 ### Analytics model
@@ -179,7 +179,7 @@ Metric tables (rebuilt every run): `monthly_store_revenue (month, store_id)`,
 | `invalid_timestamp` - must start with an ISO date and parse | stores, orders | INVALID |
 | `invalid_amount` - must be whole cents, plain digits only (PostgreSQL would also accept `0x10`, `1_000`) | products, supplies, orders | INVALID |
 | `amount_out_of_range` - above 9,999,999,999 cents (would overflow `NUMERIC(10,2)`) | products, supplies, orders | INVALID |
-| `invalid_key` - SKU / supply id longer than 50 characters | products, supplies | INVALID |
+| `invalid_key` - SKU / supply id longer than 50 characters (keys are indexed; very long keys would exceed PostgreSQL's index row size and fail the whole file) | products, supplies | INVALID |
 | `invalid_tax_rate` - number between 0 and 1 | stores | INVALID |
 | `invalid_boolean` | supplies | INVALID |
 | `negative_amount` | products, supplies, orders | INVALID |
@@ -195,7 +195,7 @@ File-level checks in `ingest.py`: a **missing or duplicated column**, a file
 that **cannot be opened**, or text that is **not valid UTF-8** (or contains NUL
 bytes) fails the whole file (nothing loaded, logged as `FAILED` with the
 error); an **extra column** is logged as a warning and ignored; an **empty
-file** is logged as `EMPTY`; **blank lines** are ignored. "Empty" values
+file** is logged as `EMPTY` (its header is still checked); **blank lines** are ignored (a line of only commas is a row of empty values and is rejected). "Empty" values
 include whitespace-only values (spaces, tabs).
 
 Each rejected record stores the batch, file row number, rule, a readable
@@ -242,8 +242,9 @@ the pipeline uses two alternatives:
 2. **Record-level: business-key upserts.** Every load into staging and
    analytics is `INSERT ... ON CONFLICT (key) DO UPDATE ... WHERE ... IS DISTINCT FROM ...`.
    The same record twice gives one row; a corrected record replaces the old
-   one; an unchanged record is not even rewritten. Each staging row remembers
-   the batch it came from, and an upsert only applies when
+   one; re-running the same batch rewrites nothing. Each staging row records
+   the newest batch that delivered it (an identical re-send only updates that
+   batch number), and an upsert only applies when
    `existing.batch_id <= new.batch_id`, so re-processing an **older** batch
    (e.g. the re-check of held rows) can never overwrite newer data.
 
@@ -251,7 +252,7 @@ the pipeline uses two alternatives:
 |---|---|
 | How is processed data identified? | File hash with status `SUCCESS` (or `EMPTY`) in `audit.ingestion_log`. |
 | How are duplicates prevented? | Checkpoint (same file) + primary keys and upserts (same record in different files) + `duplicate_key` rule (same record within a file). |
-| How are corrections applied? | A later file containing the same key overwrites the row (the most recently loaded batch wins; an older batch never overwrites a newer one); metrics are rebuilt every run. |
+| How are corrections applied? | A later file containing the same key overwrites the row (the most recently loaded batch wins; an older batch never overwrites a newer one); metrics are rebuilt every run. Exception: a file whose exact content was loaded before is skipped, so reverting a file to an earlier version needs `--reset` (see README, Known limitations). |
 | Checkpoint / state? | `audit.ingestion_log` (per file) and `audit.pipeline_runs` (per run). |
 | How are failures detected? | Any error in a file rolls back that file's transaction and records `FAILED` with the error message; the run is marked `FAILED` and the process exits with code 1. The run result is written in a `finally` block on a fresh connection, so a lost connection or Ctrl+C is still recorded as `FAILED`. |
 | Two runs at once? | Prevented: each run takes a PostgreSQL advisory lock; a second run is refused and exits 1. |
@@ -267,7 +268,7 @@ they are idempotent, so if they fail the next run simply runs them again.
 
 ## 7. Testing
 
-`tests/test_pipeline.py` - 19 tests, each running the real pipeline on a small
+`tests/test_pipeline.py` - 21 tests, each running the real pipeline on a small
 dataset whose metrics were calculated by hand, in a separate `jaffle_test`
 database. They cover schema compliance (including a **deliberately invalid
 input**), invalid-record handling and categories, business-key uniqueness and
@@ -276,7 +277,7 @@ reconciliation, transformation correctness, idempotency, failure recovery,
 empty and blank input, and run-level safety (concurrent and interrupted runs,
 unreachable database, missing files). The full list is in the [README](../README.md#5-tests).
 
-Results: `outputs/test_results.txt` (19 passed).
+Results: `outputs/test_results.txt` (21 passed).
 
 ---
 
@@ -284,7 +285,7 @@ Results: `outputs/test_results.txt` (19 passed).
 
 Measured numbers are in `outputs/benchmark.txt`: a full run of the
 6-month sample (39,599 rows) takes **~11 s** on a laptop, and a rerun with
-no new files **~1.5 s**. Everything below marked *proposal* is not
+no new files **~2 s**. Everything below marked *proposal* is not
 implemented.
 
 | Topic | Current solution | At larger scale (*proposal*) |

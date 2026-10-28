@@ -126,7 +126,7 @@ schtasks /create /tn "JaffleShopPipeline" /sc daily /st 02:00 /tr "cmd /c cd /d 
 or with cron on Linux/macOS: `0 2 * * * cd /path/to/Data_Engineer_Assessment && venv/bin/python -m src.pipeline.run_pipeline`.
 `PGPASSWORD` must be set for the account the task runs as.
 
-A full run of the sample takes about **11 seconds**; a rerun with nothing new about **1.5 seconds**.
+A full run of the sample takes about **11 seconds**; a rerun with nothing new about **2 seconds**.
 
 ### Outputs
 
@@ -162,7 +162,7 @@ python -m pytest -v
 ```
 
 The tests create and use a separate database, `jaffle_test`, so the main
-database (and the project log) are not touched. 19 tests run the real
+database (and the project log) are not touched. 21 tests run the real
 pipeline on a small dataset (`tests/fixtures/good/`) whose metrics were
 calculated by hand:
 
@@ -180,15 +180,17 @@ calculated by hand:
 | `test_correction_is_not_undone_by_recheck_of_older_batch` | Re-checking an older batch never overwrites a newer correction |
 | `test_same_uuid_in_different_spelling_is_a_duplicate` | `{uuid}` / `UUID` spellings of one key are rejected as duplicates |
 | `test_out_of_range_values_are_rejected_without_failing_the_file` | Amounts that would overflow, `0x10`-style numbers and over-long keys are rejected row by row |
-| `test_blank_lines_are_ignored` | Blank lines before or after the data do not lose or reject rows |
+| `test_blank_lines_are_ignored` | Blank lines do not lose or reject rows; a line of only commas is rejected as missing values |
 | `test_duplicate_header_column_fails_the_file` | Unexpected schema: the same column twice fails the file |
 | `test_unreadable_file_fails_only_that_file` | A file that cannot be opened fails alone; the other files load |
 | `test_second_run_is_refused_while_one_is_in_progress` | Only one run at a time |
 | `test_interrupted_run_is_recorded_as_failed` | Ctrl+C mid-run is recorded as FAILED |
 | `test_unreachable_database_gives_a_clear_error` | No database connection: one clear error message and exit code 1 |
 | `test_missing_previously_loaded_file_is_reported` | A loaded file that disappears is reported; its records are kept |
+| `test_header_only_file_with_wrong_columns_fails` | A file with no data rows still has its header checked |
+| `test_recheck_never_overwrites_a_newer_identical_resend` | A held row re-checked later never overwrites a newer, unchanged re-send of the same record |
 
-Latest result: **19 passed** (`outputs/test_results.txt`).
+Latest result: **21 passed** (`outputs/test_results.txt`).
 
 ---
 
@@ -250,6 +252,8 @@ SELECT * FROM staging.orders        WHERE order_id = '<order id>';
 SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 ```
 
+* `row_num` is the number of the data record in the file (1 = first record after
+  the header; blank lines are not counted), not the text line number.
 * Every run writes one `audit.ingestion_log` row per file, including files it
   skipped, so batch ids keep increasing across runs (e.g. after the demos a new
   file may get batch 44). This is expected; the file's `SUCCESS` row is the
@@ -265,6 +269,8 @@ SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 * Dimensions are SCD Type 1 (latest value only); history would need SCD Type 2 (design in the architecture doc).
 * Records deleted from the source are not detected (the source has no delete information); if a previously loaded file disappears from the data folder, the run logs a warning and keeps its records.
 * A file with the same name but new content is treated as a new batch; its records upsert over earlier versions (the most recently loaded file wins; an older batch never overwrites a newer one).
+* The checkpoint is by file **content**: a file whose exact content was loaded before is skipped. So if a file is changed and then changed back to an earlier version, the revert is skipped and the newer values stay. Run `--reset` in that case (a full reload takes ~11 s); production would use a per-file version or a change log from the source.
+* Changing `sql/schema.sql` or a data-quality rule only affects files loaded afterwards, because files already loaded are skipped. After such a change run `--reset` to rebuild everything (~11 s); production would use versioned migrations instead.
 * Batches with `INVESTIGATE` rows are re-checked on every run; with many permanently-invalid rows this should get an age limit.
 * An item held for an unknown product leaves its order's subtotal unmatched, so the reconciliation keeps the run `FAILED` until the item is resolved (intended: the data is incomplete).
 * Each file is read fully into memory before `COPY`: peak memory is about 6x the file size (measured once with a generated 1M-row, 82 MB file: ~530 MB). Fine for monthly files of a few MB; very large files should be read in chunks.
