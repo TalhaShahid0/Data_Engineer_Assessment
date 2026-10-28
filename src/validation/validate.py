@@ -12,8 +12,9 @@ log = get_logger("validate")
 DATA_QUALITY_SQL = PROJECT_ROOT / "sql" / "data_quality.sql"
 
 
-def validate_batch(conn, batch_id):
-    """Apply the data-quality rules to one batch and load its clean rows to staging."""
+def validate_batch(conn, batch_id, recheck=False):
+    """Apply the data-quality rules to one batch and load its clean rows to staging.
+    recheck=True marks the log line as a re-check of an earlier batch."""
     run_sql_file(conn, DATA_QUALITY_SQL, {"batch_id": batch_id})
 
     table, read, accepted, rejected, flagged = fetch_all(
@@ -31,8 +32,9 @@ def validate_batch(conn, batch_id):
     )
     rule_summary = ", ".join(f"{rule} ({category}): {n}" for rule, category, n in rules) or "none"
 
-    log.info("%s: batch %s validated - read %s, accepted %s, rejected %s, flagged %s | rules hit: %s",
-             table, batch_id, read, accepted, rejected, flagged, rule_summary)
+    log.info("%s: batch %s %s - read %s, accepted %s, rejected %s, flagged %s | rules hit: %s",
+             table, batch_id, "re-checked" if recheck else "validated",
+             read, accepted, rejected, flagged, rule_summary)
     return {"rows_read": read, "rows_accepted": accepted,
             "rows_rejected": rejected, "rows_flagged": flagged}
 

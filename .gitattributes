@@ -1,0 +1,3 @@
+# Generated outputs are stored exactly as written (no line-ending conversion),
+# so running the pipeline on Windows does not mark unchanged files as modified.
+outputs/** -text

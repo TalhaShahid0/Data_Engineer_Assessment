@@ -24,6 +24,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import psycopg2
+
 from src.ingestion.ingest import already_loaded, file_sha256, ingest_file, log_batch
 from src.pipeline.db import PROJECT_ROOT, fetch_all, get_connection, load_config, run_sql_file
 from src.pipeline.logger import get_logger
@@ -105,11 +107,22 @@ def retry_quarantined(conn, table_order):
            WHERE r.category = 'INVESTIGATE'""",
     )
     for batch_id, table_name, rejected_before in sorted(batches, key=lambda b: (table_order.index(b[1]), b[0])):
-        rejected_after = validate_batch(conn, batch_id)["rows_rejected"]
+        rejected_after = validate_batch(conn, batch_id, recheck=True)["rows_rejected"]
         conn.commit()
         if rejected_after < rejected_before:
             log.info("%s: batch %s re-checked, %s previously held row(s) now loaded",
                      table_name, batch_id, rejected_before - rejected_after)
+
+
+def warn_missing_files(conn, data_dir):
+    """Warn about files loaded earlier that are no longer in the data folder.
+    Their records are kept: deletions in the source are not detected."""
+    present = {path.name for path in data_dir.iterdir()} if data_dir.exists() else set()
+    loaded = fetch_all(conn, "SELECT DISTINCT file_name FROM audit.ingestion_log WHERE status = 'SUCCESS'")
+    for (file_name,) in sorted(loaded):
+        if file_name not in present:
+            log.warning("%s was loaded in an earlier run but is no longer in %s; its records are kept",
+                        file_name, data_dir.name)
 
 
 def check_freshness(conn, max_age_days):
@@ -180,6 +193,7 @@ def run_pipeline(config, data_dir=None, reset=False, simulate_failure=None):
             for path in sorted(data_dir.glob(table["file_pattern"])):
                 file_status = process_file(conn, run_id, table, path, simulate_failure)
                 counts[file_status] += 1
+        warn_missing_files(conn, data_dir)
 
         # 2. Re-check rows that were waiting for a parent record.
         retry_quarantined(conn, table_order)
@@ -229,7 +243,14 @@ def main():
                         help="fail on purpose while processing this file (recovery demo)")
     args = parser.parse_args()
 
-    summary = run_pipeline(load_config(), reset=args.reset, simulate_failure=args.simulate_failure)
+    try:
+        summary = run_pipeline(load_config(), reset=args.reset, simulate_failure=args.simulate_failure)
+    except psycopg2.OperationalError as exc:
+        # Database unreachable or login failed: one clear line instead of a traceback.
+        log.error("Cannot connect to the database: %s", str(exc).strip().splitlines()[0])
+        log.error("Check that PostgreSQL is running, the settings in config/config.yaml "
+                  "and the PGPASSWORD environment variable")
+        sys.exit(1)
     sys.exit(0 if summary["status"] == "SUCCESS" else 1)
 
 

@@ -42,7 +42,7 @@ flowchart LR
 | Transformation | Dimensions and facts upserted from staging; metrics rebuilt | `sql/transformations.sql`, `src/transformation/` |
 | Target | Star schema + metric tables | `analytics` schema |
 | Orchestration | One CLI; per-file transactions; checkpoint by file hash; scheduled with Windows Task Scheduler or cron (example in the README) | `src/pipeline/run_pipeline.py` |
-| Testing | 17 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
+| Testing | 19 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
 | Logging and monitoring | Log file + console; run and file history in `audit`; reconciliation views; freshness check; exit code 1 on failure | `src/pipeline/logger.py`, `audit` schema |
 
 **Order of work in one run**
@@ -267,16 +267,16 @@ they are idempotent, so if they fail the next run simply runs them again.
 
 ## 7. Testing
 
-`tests/test_pipeline.py` - 17 tests, each running the real pipeline on a small
+`tests/test_pipeline.py` - 19 tests, each running the real pipeline on a small
 dataset whose metrics were calculated by hand, in a separate `jaffle_test`
 database. They cover schema compliance (including a **deliberately invalid
 input**), invalid-record handling and categories, business-key uniqueness and
 corrections, referential integrity, record-count and aggregate
 reconciliation, transformation correctness, idempotency, failure recovery,
-empty and blank input, and run-level safety (concurrent and interrupted
-runs). The full list is in the [README](../README.md#5-tests).
+empty and blank input, and run-level safety (concurrent and interrupted runs,
+unreachable database, missing files). The full list is in the [README](../README.md#5-tests).
 
-Results: `outputs/test_results.txt` (17 passed).
+Results: `outputs/test_results.txt` (19 passed).
 
 ---
 

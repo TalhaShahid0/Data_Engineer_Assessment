@@ -76,16 +76,21 @@ open during the 6 sampled months. All findings are listed in
 winget install -e --id Python.Python.3.12
 winget install -e --id PostgreSQL.PostgreSQL.16 --interactive   # choose a password for user "postgres"
 
-# 2. Create a virtual environment and install the dependencies
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+# 2. Get the code (or unzip the submission) and go into the project folder
+git clone https://github.com/TalhaShahid0/Data_Engineer_Assessment
+cd Data_Engineer_Assessment
 
 # 3. Give the pipeline the database password (never stored in the project)
 [Environment]::SetEnvironmentVariable('PGPASSWORD', '<your password>', 'User')
-#    then open a new terminal so the variable is visible
+#    then open a NEW terminal in the project folder so the variable is visible
 
-# 4. Create the database
+# 4. Create a virtual environment and install the dependencies
+python -m venv venv
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # once, only if activate says "running scripts is disabled"
+venv\Scripts\activate
+pip install -r requirements.txt
+
+# 5. Create the database
 & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h localhost -c "CREATE DATABASE jaffle"
 ```
 
@@ -157,7 +162,7 @@ python -m pytest -v
 ```
 
 The tests create and use a separate database, `jaffle_test`, so the main
-database (and the project log) are not touched. 17 tests run the real
+database (and the project log) are not touched. 19 tests run the real
 pipeline on a small dataset (`tests/fixtures/good/`) whose metrics were
 calculated by hand:
 
@@ -180,8 +185,10 @@ calculated by hand:
 | `test_unreadable_file_fails_only_that_file` | A file that cannot be opened fails alone; the other files load |
 | `test_second_run_is_refused_while_one_is_in_progress` | Only one run at a time |
 | `test_interrupted_run_is_recorded_as_failed` | Ctrl+C mid-run is recorded as FAILED |
+| `test_unreachable_database_gives_a_clear_error` | No database connection: one clear error message and exit code 1 |
+| `test_missing_previously_loaded_file_is_reported` | A loaded file that disappears is reported; its records are kept |
 
-Latest result: **17 passed** (`outputs/test_results.txt`).
+Latest result: **19 passed** (`outputs/test_results.txt`).
 
 ---
 
@@ -218,6 +225,7 @@ python -m src.pipeline.run_pipeline --reset        # back to the clean state
 | A file has a missing or duplicate column, cannot be opened, or is not valid UTF-8 text | That file is rolled back and logged `FAILED` with the error; other files continue; run exits 1 | Fix or replace the file, rerun the pipeline: only that file is processed |
 | Bad rows inside a file | Rows rejected with a reason (`INVALID` / `INVESTIGATE`); the rest of the file loads | Review `outputs/rejected_records.csv`; send a corrected file - its rows upsert over the old ones |
 | A row's parent has not arrived yet | Row held as `INVESTIGATE` | Nothing: it loads automatically on the first run after the parent arrives |
+| Database cannot be reached at startup (not running, wrong settings or password) | One clear error line ("Cannot connect to the database: ..."), nothing is changed, exit 1 | Start PostgreSQL / fix `config/config.yaml` or `PGPASSWORD`, then rerun |
 | Database unavailable / crash / Ctrl+C mid-run | The current file's transaction is rolled back, nothing half-loaded; the run is recorded as `FAILED` (on a fresh connection when possible) | Rerun the same command |
 | Reconciliation check fails | Run marked `FAILED`, check logged as ERROR | Inspect `outputs/layer_reconciliation.csv` |
 
@@ -229,7 +237,8 @@ SELECT * FROM audit.pipeline_runs ORDER BY run_id DESC LIMIT 5;
 
 -- Files of the last run: status, counts and error messages
 SELECT batch_id, file_name, status, rows_read, rows_accepted, rows_rejected, rows_flagged, error_message
-FROM audit.ingestion_log WHERE run_id = (SELECT max(run_id) FROM audit.pipeline_runs);
+FROM audit.ingestion_log WHERE run_id = (SELECT max(run_id) FROM audit.pipeline_runs)
+ORDER BY batch_id;
 
 -- Why records were rejected, with the original row
 SELECT row_num, category, rule_name, reason, record
@@ -245,7 +254,7 @@ SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 
 * Only 6 months of the public data are used (enough to show every behaviour; the full dataset is ~4x larger, estimated ~40 s per full run - see `outputs/benchmark.txt`).
 * Dimensions are SCD Type 1 (latest value only); history would need SCD Type 2 (design in the architecture doc).
-* Records deleted from the source are not detected (the source has no delete information).
+* Records deleted from the source are not detected (the source has no delete information); if a previously loaded file disappears from the data folder, the run logs a warning and keeps its records.
 * A file with the same name but new content is treated as a new batch; its records upsert over earlier versions (the most recently loaded file wins; an older batch never overwrites a newer one).
 * Batches with `INVESTIGATE` rows are re-checked on every run; with many permanently-invalid rows this should get an age limit.
 * An item held for an unknown product leaves its order's subtotal unmatched, so the reconciliation keeps the run `FAILED` until the item is resolved (intended: the data is incomplete).

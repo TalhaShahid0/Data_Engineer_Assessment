@@ -384,3 +384,33 @@ def test_interrupted_run_is_recorded_as_failed(run, data_dir, db, monkeypatch):
 
     assert query(db, "SELECT status, error_message FROM audit.pipeline_runs") == [("FAILED", "run interrupted")]
     assert run(data_dir)["status"] == "SUCCESS"                          # lock was released
+
+
+def test_unreachable_database_gives_a_clear_error(test_config, monkeypatch, caplog):
+    """No traceback when the database cannot be reached: one clear message and exit code 1."""
+    import copy
+    import sys
+    import src.pipeline.run_pipeline as pipeline
+
+    bad_config = copy.deepcopy(test_config)
+    bad_config["database"]["port"] = 5999                                # nothing listens here
+    monkeypatch.setattr(pipeline, "load_config", lambda: bad_config)
+    monkeypatch.setattr(sys, "argv", ["run_pipeline"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        pipeline.main()
+
+    assert exit_info.value.code == 1
+    assert "Cannot connect to the database" in caplog.text
+
+
+def test_missing_previously_loaded_file_is_reported(run, data_dir, db, caplog):
+    """A loaded file that disappears is reported; its records are kept (deletes are not detected)."""
+    run(data_dir, reset=True)
+    (data_dir / "items_2017_02.csv").unlink()
+
+    result = run(data_dir)
+
+    assert result["status"] == "SUCCESS"
+    assert "items_2017_02.csv was loaded in an earlier run but is no longer in" in caplog.text
+    assert scalar(db, "SELECT count(*) FROM analytics.fct_order_items") == 4
