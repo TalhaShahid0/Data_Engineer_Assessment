@@ -1,0 +1,4 @@
+id,name,cost,perishable,sku
+SUP-001,napkin,7,False,JAF-001
+SUP-002,bread,300,True,JAF-001
+SUP-001,napkin,7,False,BEV-001

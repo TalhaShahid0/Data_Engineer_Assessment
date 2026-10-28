@@ -1,0 +1,2 @@
+id,customer,ordered_at,store_id,subtotal,tax_paid,order_total
+dddddddd-0000-0000-0000-000000000003,cccccccc-0000-0000-0000-000000000002,2017-02-03T09:15:00,aaaaaaaa-0000-0000-0000-000000000001,600,36,636
