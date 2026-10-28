@@ -1,0 +1,4 @@
+psycopg2-binary==2.9.10   # PostgreSQL driver (COPY, transactions)
+PyYAML==6.0.2             # reads config/config.yaml
+requests==2.32.3          # downloads the Jaffle Shop CSVs
+pytest==8.3.4             # automated tests

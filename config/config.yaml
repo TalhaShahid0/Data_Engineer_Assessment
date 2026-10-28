@@ -1,0 +1,54 @@
+# Pipeline configuration.
+# The database password is NOT stored here: set the PGPASSWORD environment variable.
+
+database:
+  host: localhost
+  port: 5432
+  dbname: jaffle
+  user: postgres
+
+paths:
+  sample_data: data/sample
+  sql: sql
+  outputs: outputs
+  logs: outputs/logs
+
+source:
+  name: Jaffle Shop sample data (dbt Labs)
+  base_url: https://raw.githubusercontent.com/dbt-labs/jaffle-shop-data/main/jaffle-data
+  months_to_keep: 6          # representative subset: first N months of orders/items
+
+# Source tables in load order (parents before children).
+# file_pattern: which files in data/sample belong to the table
+# columns:      expected header, in order
+# required:     columns that must be present in the file header
+tables:
+  - name: stores
+    file_pattern: raw_stores.csv
+    columns: [id, name, opened_at, tax_rate]
+    required: [id, name, opened_at, tax_rate]
+
+  - name: customers
+    file_pattern: raw_customers.csv
+    columns: [id, name]
+    required: [id, name]
+
+  - name: products
+    file_pattern: raw_products.csv
+    columns: [sku, name, type, price, description]
+    required: [sku, name, type, price]
+
+  - name: supplies
+    file_pattern: raw_supplies.csv
+    columns: [id, name, cost, perishable, sku]
+    required: [id, name, cost, perishable, sku]
+
+  - name: orders
+    file_pattern: orders_*.csv
+    columns: [id, customer, ordered_at, store_id, subtotal, tax_paid, order_total]
+    required: [id, customer, ordered_at, store_id, subtotal, tax_paid, order_total]
+
+  - name: items
+    file_pattern: items_*.csv
+    columns: [id, order_id, sku]
+    required: [id, order_id, sku]

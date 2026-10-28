@@ -1,0 +1,14 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets (database password comes from the PGPASSWORD environment variable)
+.env
+
+# Run logs are regenerated on every run
+outputs/logs/
+
+# The assessment brief itself is not part of the solution
+*.docx
