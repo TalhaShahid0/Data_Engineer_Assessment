@@ -301,7 +301,8 @@ CREATE TABLE analytics.fct_orders (
     order_date  DATE NOT NULL,
     subtotal    NUMERIC(10, 2) NOT NULL,
     tax_paid    NUMERIC(10, 2) NOT NULL,
-    order_total NUMERIC(10, 2) NOT NULL
+    order_total NUMERIC(10, 2) NOT NULL,
+    item_count  INT NOT NULL DEFAULT 0          -- 0 = empty order (excluded from order metrics)
 );
 
 CREATE INDEX ix_fct_orders_customer ON analytics.fct_orders (customer_id);
@@ -399,3 +400,48 @@ LEFT JOIN raw_counts r ON r.batch_id = l.batch_id
 LEFT JOIN malformed  m ON m.batch_id = l.batch_id
 WHERE l.status = 'SUCCESS'
 ORDER BY l.batch_id;
+
+
+-- =====================================================================
+-- RECONCILIATION across layers (staging -> facts -> metrics)
+-- Every check must have passed = true after a successful run.
+-- =====================================================================
+
+CREATE VIEW audit.layer_reconciliation AS
+SELECT check_name, expected, actual, expected = actual AS passed
+FROM (
+SELECT 'orders: staging count = fct_orders count' AS check_name,
+       (SELECT count(*) FROM staging.orders)::NUMERIC AS expected,
+       (SELECT count(*) FROM analytics.fct_orders)::NUMERIC AS actual
+UNION ALL
+SELECT 'orders: staging order_total = fct_orders order_total',
+       (SELECT COALESCE(sum(order_total), 0) FROM staging.orders),
+       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders)
+UNION ALL
+SELECT 'items: staging count = fct_order_items count',
+       (SELECT count(*) FROM staging.items),
+       (SELECT count(*) FROM analytics.fct_order_items)
+UNION ALL
+SELECT 'orders: subtotal = sum of item prices (mismatched orders)',
+       0,
+       (SELECT count(*) FROM analytics.fct_orders o
+        WHERE o.item_count > 0
+          AND o.subtotal <> (SELECT sum(i.unit_price) FROM analytics.fct_order_items i
+                             WHERE i.order_id = o.order_id))
+UNION ALL
+SELECT 'metric 1: non-empty orders = sum(order_count)',
+       (SELECT count(*) FROM analytics.fct_orders WHERE item_count > 0),
+       (SELECT COALESCE(sum(order_count), 0) FROM analytics.monthly_store_revenue)
+UNION ALL
+SELECT 'metric 1: fct_orders revenue = sum(revenue)',
+       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders),
+       (SELECT COALESCE(sum(revenue), 0) FROM analytics.monthly_store_revenue)
+UNION ALL
+SELECT 'metric 2: fct_orders revenue = sum(lifetime_value)',
+       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders),
+       (SELECT COALESCE(sum(lifetime_value), 0) FROM analytics.customer_summary)
+UNION ALL
+SELECT 'metric 3: fct_order_items count = sum(units_sold)',
+       (SELECT count(*) FROM analytics.fct_order_items),
+       (SELECT COALESCE(sum(units_sold), 0) FROM analytics.monthly_product_sales)
+) AS checks;
