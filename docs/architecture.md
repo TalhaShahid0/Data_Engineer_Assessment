@@ -1,26 +1,29 @@
 # Architecture and Design Decisions
 
-This document explains how the pipeline is built and why. Setup and run
-instructions are in the [README](../README.md).
+This document explains **how the pipeline works and why it is built this way**.
+For setup and run instructions, see the [README](../README.md).
+
+**In one paragraph:** CSV files are loaded as-is into a `raw` layer. SQL
+data-quality rules check every row; bad rows are set aside with a reason, good
+rows are cleaned into a `staging` layer. From there a star schema and three
+metric tables are built in an `analytics` layer. Every step is logged in an
+`audit` layer, and every load is designed so that running it twice gives the
+same result.
 
 ---
 
-## 1. Overview
-
-A batch ELT pipeline that loads the public **Jaffle Shop** CSV files into
-**PostgreSQL**, validates them, and builds a star schema with three metric
-tables.
+## Technology choices
 
 | Choice | Why |
 |---|---|
-| **PostgreSQL** | Real primary/foreign keys, CHECK constraints, transactions and `ON CONFLICT` upserts, which are what make the pipeline safe to rerun. Free, runs locally. |
-| **SQL for the logic** | Data-quality rules, cleaning, upserts, metrics and reconciliation are all SQL (`sql/`), so the rules are readable in one place and run inside the database, next to the data. |
-| **Python as thin glue** | Downloads files, checks headers, bulk-loads with `COPY`, runs the SQL files in order, records checkpoints and logs. No pandas: the data never needs to be held in Python. |
-| **No orchestrator / dbt / Docker** | One command runs everything. For 16 small files from 6 source tables and a few seconds of processing, Airflow or dbt would add setup without adding reliability. Section 8 explains how it would be scheduled. |
+| **PostgreSQL** | Real primary and foreign keys, CHECK constraints, transactions and `ON CONFLICT` upserts. These are what make the pipeline safe to rerun. Free and runs locally. |
+| **SQL for the data logic** | Data-quality rules, cleaning, upserts, metrics and reconciliation all live in `sql/`. The rules are readable in one place and run inside the database, next to the data. |
+| **Python only as glue** | Downloads files, checks headers, bulk-loads with `COPY`, runs the SQL files in order, records progress and writes logs. No pandas: the data never needs to sit in Python. |
+| **No Airflow, dbt or Docker** | One command runs everything. For 16 small files and a few seconds of work, these tools would add setup without adding reliability. Scheduling uses Windows Task Scheduler or cron (example in the README). |
 
 ---
 
-## 2. Data flow
+## How data flows
 
 ```mermaid
 flowchart LR
@@ -34,40 +37,48 @@ flowchart LR
     LOG -.- STG
 ```
 
-| Layer | Component | Where |
+### The building blocks
+
+| Part | What it does | Where |
 |---|---|---|
-| Source and ingestion | Download with retries; per-file header check; `COPY` into raw | `src/ingestion/` |
-| Raw storage | One table per source, every expected column as `TEXT`, plus `batch_id`, `source_file`, `row_num`, `loaded_at`. Bad values are stored as received, so a batch can be re-validated from here (done automatically for batches with held rows); the source CSVs remain the recoverable copy; rows with the wrong number of fields are kept as JSON in `audit.rejected_records`, and unexpected extra columns are ignored (with a warning). | `raw` schema |
-| Validation | SQL rules write failures to `audit.rejected_records`; clean rows are cast and upserted into staging | `sql/data_quality.sql`, `src/validation/` |
-| Transformation | Dimensions and facts upserted from staging; metrics rebuilt | `sql/transformations.sql`, `src/transformation/` |
-| Target | Star schema + metric tables | `analytics` schema |
-| Orchestration | One CLI; per-file transactions; checkpoint by file hash; scheduled with Windows Task Scheduler or cron (example in the README) | `src/pipeline/run_pipeline.py` |
-| Testing | 21 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
-| Logging and monitoring | Log file + console; run and file history in `audit`; reconciliation views; freshness check; exit code 1 on failure | `src/pipeline/logger.py`, `audit` schema |
+| **Ingestion** | Downloads the source (with retries), checks each file's header, bulk-loads it into `raw` | `src/ingestion/` |
+| **Raw layer** | Stores every row as received, all columns as text, plus where it came from (`batch_id`, `source_file`, `row_num`, `loaded_at`) | `raw` schema |
+| **Validation** | Runs the data-quality rules; rejected rows go to `audit.rejected_records`, clean rows are typed and loaded into `staging` | `sql/data_quality.sql`, `src/validation/` |
+| **Transformation** | Builds dimensions and facts from `staging` and rebuilds the metric tables | `sql/transformations.sql`, `src/transformation/` |
+| **Target** | Star schema and metric tables | `analytics` schema |
+| **Orchestration** | One command; one transaction per file; tracks which files are done | `src/pipeline/run_pipeline.py` |
+| **Testing** | 21 pytest tests on a small hand-checked dataset, in a separate database | `tests/` |
+| **Logging and monitoring** | Log file and console; full run and file history; reconciliation checks; freshness check; exit code 1 on failure | `src/pipeline/logger.py`, `audit` schema |
 
-**Order of work in one run**
+Notes on the raw layer:
 
-1. Create the schema if it does not exist (`--reset` recreates it).
-2. For every file, parents before children (stores, customers, products, supplies, orders, items), in **one transaction per file**:
-   hash → skip if already loaded → header check → `COPY` to raw → `data_quality.sql` → mark `SUCCESS` → commit.
-3. Re-check batches holding `INVESTIGATE` rows (late-arriving parents).
-4. Run `transformations.sql` (one transaction) and check `audit.layer_reconciliation`.
-5. Export CSVs, check freshness, record the run result.
+- Bad values are kept exactly as received, so a batch can be checked again from `raw` (this happens automatically for batches with held rows). The source CSV files remain the recoverable copy.
+- Rows with the wrong number of fields cannot be stored in columns; they are kept as JSON in `audit.rejected_records`.
+- Unexpected extra columns are ignored, with a warning in the log.
+
+### What happens in one run
+
+1. Create the tables if they do not exist (`--reset` drops and recreates them).
+2. Process the files, parents before children (stores → customers → products → supplies → orders → items). Each file is **one transaction**:
+   *hash the file → skip it if already loaded → check the header → load into `raw` → run the data-quality rules → mark it `SUCCESS` → commit.*
+3. Re-check older batches that hold rows waiting for a parent record (late-arriving data).
+4. Build the `analytics` layer (one transaction) and run the reconciliation checks.
+5. Export the CSVs, check freshness and record the result of the run.
 
 ---
 
-## 3. Data model
+## Data model
 
-### Schemas
+### Layers
 
-| Schema | Purpose | Keys |
+| Schema | Contains | Key |
 |---|---|---|
-| `raw` | Exact copy of each file, all `TEXT` | `(batch_id, row_num)` |
-| `staging` | Typed, cleaned, one row per business key | business key (e.g. `order_id`) |
-| `analytics` | Star schema and metrics, with enforced foreign keys | no surrogate keys: the stable business keys (UUIDs, product SKU) are used |
+| `raw` | Every source row as received, all text | `(batch_id, row_num)` |
+| `staging` | Typed, cleaned data; one row per business key | business key, e.g. `order_id` |
+| `analytics` | Star schema and metrics, with enforced foreign keys | the stable business keys (UUIDs, product SKU); no surrogate keys |
 | `audit` | Runs, file log, rejected records, reconciliation views | `run_id`, `batch_id` |
 
-### Analytics model
+### Star schema
 
 ```mermaid
 erDiagram
@@ -114,186 +125,266 @@ erDiagram
     }
 ```
 
-Metric tables (rebuilt every run): `monthly_store_revenue (month, store_id)`,
-`customer_summary (customer_id)`, `monthly_product_sales (month, sku)`.
+The three metric tables are rebuilt on every run: `monthly_store_revenue`
+(per month and store), `customer_summary` (per customer) and
+`monthly_product_sales` (per month and product).
 
 ### Modelling decisions
 
-| Decision | Reason |
-|---|---|
-| Star schema: 3 dimensions, 2 facts | The data is transactional (orders and items), so facts and dimensions fit the questions asked: revenue by month/store, customers, products. |
-| Two fact grains: order and item | Order totals (with tax) live on the order; product sales need one row per item. Keeping both avoids splitting tax across items. |
-| `UUID` type for ids | The source ids are UUIDs; the type rejects malformed ids and stores them in 16 bytes. |
-| `NUMERIC(10,2)` dollars | Source amounts are integer cents; converted once in staging. `NUMERIC` avoids floating-point rounding in sums. |
-| Supplies keyed by `(supply_id, sku)` | The source `id` is **not unique**: one supply (e.g. a napkin) is used by several products. |
-| `dim_products.unit_cost` = sum of supply costs | Gives a cost per unit sold, so gross margin can be calculated. |
-| Item price captured at first load | The source has no item price. The product's price at load time is stored on the item, so a later price change does not rewrite past sales. |
-| `fct_orders.item_count` | Identifies empty orders (no items) so metrics can exclude them; recalculated every run, so late items update their order. |
-| Raw columns are all `TEXT` | A bad value (e.g. `"abc"` as an amount) can still be stored and then rejected with a reason, instead of failing the load. |
+- **Star schema with 3 dimensions and 2 facts.** The data is transactional (orders and items), and the questions are about revenue per month and store, customers and products – a natural fit for facts and dimensions.
+- **Two fact tables: one row per order and one row per item.** Order totals (including tax) belong to the order; product sales need one row per item. Keeping both avoids splitting tax across items.
+- **`UUID` type for ids.** The source ids are UUIDs. The type rejects malformed ids and stores each in 16 bytes.
+- **Money as `NUMERIC(10,2)` dollars.** The source stores whole cents; they are converted once, in staging. `NUMERIC` avoids floating-point rounding errors in sums.
+- **Supplies keyed by `(supply_id, sku)`.** The source `id` is not unique: one supply (such as a napkin) is used by several products.
+- **Product cost = sum of its supply costs** (`dim_products.unit_cost`). This gives a cost per unit sold, so gross margin can be calculated.
+- **Item price captured at first load.** The source has no price per item, so the product's price at load time is stored on the item. A later price change does not rewrite past sales.
+- **`item_count` on each order.** Identifies empty orders (no items) so the metrics can leave them out. It is recalculated every run, so items that arrive late update their order.
+- **Raw columns are all text.** A bad value (for example `"abc"` as an amount) can still be stored and then rejected with a clear reason, instead of breaking the load.
 
 ### Updates and history
 
-* **Current approach - SCD Type 1:** dimensions keep only the latest value
-  (`ON CONFLICT ... DO UPDATE`). The source has no change history, and the
-  metrics only need current names.
-* **If history were needed - SCD Type 2:** for example, product price changes
-  would add `valid_from`, `valid_to` and `is_current` to `dim_products`; a
-  change closes the current row and inserts a new one, and facts join on the
-  version valid at `ordered_at`. Not implemented because the source cannot
-  show a price change.
-* **Corrected facts:** a corrected order arriving in a later file replaces the
-  existing row (same `order_id`), and the metrics are rebuilt, so the
-  correction flows through (covered by a test).
+- **Today – SCD Type 1:** dimensions keep only the latest value. The source has no change history, and the metrics only need current names.
+- **If history were needed – SCD Type 2:** for example, product prices would get `valid_from`, `valid_to` and `is_current` columns. A price change closes the current row and adds a new one, and sales join to the version that was valid when the order was placed. Not built, because the source cannot show a price change.
+- **Corrected facts:** a corrected order in a later file replaces the existing row (same `order_id`), and the metrics are rebuilt, so the correction flows through. This is covered by a test.
 
 ---
 
-## 4. Data quality
+## Data quality
 
 ### Issues found in the source data
 
-| Issue | Where | Handling |
+| Finding | File | How it is handled |
 |---|---|---|
-| `id` is not unique on its own | `raw_supplies` | Composite key `(supply_id, sku)` |
-| Trailing space in a name (`"for richer or pourover "`) | `raw_products` | `TRIM` and collapse repeated spaces in staging |
-| Amounts stored as integer cents | orders, products, supplies | Converted to dollars (`/ 100.0`) in staging |
-| Timestamps without a time zone | orders, stores | Stored as `TIMESTAMP` (local shop time); documented assumption |
-| No item quantity or price | `raw_items` | One row = one unit; price taken from products |
-| 125 orders with total 0 and **no items** | `raw_orders` | Loaded, flagged as `EXCEPTION`, excluded from order metrics |
-| `tax_paid` is 1 cent below `subtotal × tax_rate` on 939 of 15,774 orders (e.g. 6% of $19.00 = $1.14, source has $1.13). All 15,774 match `trunc(subtotal_dollars × tax_rate × 100)` in floating point, so the source system truncates a float instead of rounding | `raw_orders` | Accepted as the source's rule (customers paid that amount). The data-quality check compares `subtotal + tax_paid` with `order_total`, which always match |
+| Supply `id` is not unique on its own | `raw_supplies` | Composite key `(supply_id, sku)` |
+| A product name has a trailing space (`"for richer or pourover "`) | `raw_products` | Whitespace is trimmed and collapsed in staging |
+| Amounts are in whole cents | orders, products, supplies | Converted to dollars in staging |
+| Timestamps have no time zone | orders, stores | Stored as local shop time (documented assumption) |
+| Items have no quantity or price | `raw_items` | One row = one unit; price taken from the product |
+| 125 orders have a total of 0 and **no items** | `raw_orders` | Loaded, flagged as `EXCEPTION`, left out of the order metrics |
+| Tax is 1 cent lower than expected on 939 of 15,774 orders | `raw_orders` | Accepted as the source system's rule (see below) |
 
-### Three categories
+**About the 1-cent tax difference:** for example, 6% of $19.00 is $1.14, but the
+source has $1.13. All 15,774 orders match `trunc(subtotal_dollars × tax_rate × 100)`
+calculated in floating point – the source system truncates instead of rounding.
+This is what customers paid, so it is accepted. The quality check compares
+`subtotal + tax_paid` with `order_total`, and those always match.
+
+### Three categories of problems
 
 | Category | Meaning | Loaded? |
 |---|---|---|
 | **INVALID** | The row is broken and cannot be used (missing field, wrong type, negative amount, duplicate) | No |
-| **INVESTIGATE** | The row may be correct but needs a person or more data (unknown customer that may arrive later, order before the store opened, totals that do not add up) | No - held, and re-checked on every run |
-| **EXCEPTION** | A legitimate but unusual business case (zero-value order, 1-cent rounding) | Yes - loaded and flagged |
+| **INVESTIGATE** | The row may be fine but needs a person or more data (unknown customer that may arrive later, order before the store opened, totals that don't add up) | No – held and re-checked on every run |
+| **EXCEPTION** | Unusual but legitimate (zero-value order, 1-cent rounding) | Yes – loaded and flagged |
 
-### Rules (all in `sql/data_quality.sql`)
+### The rules
 
-| Rule | Tables | Category |
+All row rules live in `sql/data_quality.sql`.
+
+**INVALID – the row is rejected**
+
+| Rule | Applies to | Meaning |
 |---|---|---|
-| `malformed_row` - wrong number of fields (recorded by `ingest.py`) | all | INVALID |
-| `missing_required` - required field empty | all | INVALID |
-| `invalid_uuid` | stores, customers, orders, items | INVALID |
-| `invalid_timestamp` - must start with an ISO date and parse | stores, orders | INVALID |
-| `invalid_amount` - must be whole cents, plain digits only (PostgreSQL would also accept `0x10`, `1_000`) | products, supplies, orders | INVALID |
-| `amount_out_of_range` - above 9,999,999,999 cents (would overflow `NUMERIC(10,2)`) | products, supplies, orders | INVALID |
-| `invalid_key` - SKU / supply id longer than 50 characters (keys are indexed; very long keys would exceed PostgreSQL's index row size and fail the whole file) | products, supplies | INVALID |
-| `invalid_tax_rate` - number between 0 and 1 | stores | INVALID |
-| `invalid_boolean` | supplies | INVALID |
-| `negative_amount` | products, supplies, orders | INVALID |
-| `duplicate_key` - same key twice in one file (UUIDs compared in normalised form, so `{…}` and upper case match); later copies are rejected | all | INVALID |
-| `unknown_customer`, `unknown_store` | orders | INVESTIGATE |
-| `unknown_order` (may be late), `unknown_product` | items, supplies | INVESTIGATE |
-| `before_store_opened` | orders | INVESTIGATE |
-| `total_mismatch` - `subtotal + tax_paid` differs from `order_total` by more than 1 cent | orders | INVESTIGATE |
-| `total_rounding` - differs by exactly 1 cent | orders | EXCEPTION |
-| `zero_value_order` | orders | EXCEPTION |
+| `malformed_row` | all | Wrong number of fields (recorded by `ingest.py`) |
+| `missing_required` | all | A required field is empty (spaces and tabs count as empty) |
+| `invalid_uuid` | stores, customers, orders, items | An id is not a valid UUID |
+| `invalid_timestamp` | stores, orders | Not a valid date-time starting with an ISO date |
+| `invalid_amount` | products, supplies, orders | Not a whole number of cents in plain digits (PostgreSQL would also accept `0x10` or `1_000`) |
+| `amount_out_of_range` | products, supplies, orders | Above 9,999,999,999 cents, which would overflow the column |
+| `invalid_key` | products, supplies | SKU or supply id longer than 50 characters (very long keys would exceed PostgreSQL's index size and fail the whole file) |
+| `invalid_tax_rate` | stores | Not a number between 0 and 1 |
+| `invalid_boolean` | supplies | `perishable` is not true/false |
+| `negative_amount` | products, supplies, orders | An amount below zero |
+| `duplicate_key` | all | Same key twice in one file; later copies are rejected (UUIDs are compared in normal form, so `{…}` and upper case match) |
 
-File-level checks in `ingest.py`: a **missing or duplicated column**, a file
-that **cannot be opened**, or text that is **not valid UTF-8** (or contains NUL
-bytes) fails the whole file (nothing loaded, logged as `FAILED` with the
-error); an **extra column** is logged as a warning and ignored; an **empty
-file** is logged as `EMPTY` (its header is still checked); **blank lines** are ignored (a line of only commas is a row of empty values and is rejected). "Empty" values
-include whitespace-only values (spaces, tabs).
+**INVESTIGATE – the row is held**
 
-Each rejected record stores the batch, file row number, rule, a readable
-reason (including the bad value) and the original row as JSON, so it can be
+| Rule | Applies to | Meaning |
+|---|---|---|
+| `unknown_customer`, `unknown_store` | orders | The customer or store does not exist (yet) |
+| `unknown_order` | items | The order does not exist yet (may arrive later) |
+| `unknown_product` | items, supplies | The SKU does not exist |
+| `before_store_opened` | orders | The order is dated before the store opened |
+| `total_mismatch` | orders | `subtotal + tax_paid` differs from `order_total` by more than 1 cent |
+
+**EXCEPTION – the row is loaded and flagged**
+
+| Rule | Applies to | Meaning |
+|---|---|---|
+| `total_rounding` | orders | The totals differ by exactly 1 cent |
+| `zero_value_order` | orders | The order total is zero |
+
+### File-level checks
+
+These happen in `ingest.py`, before any row is loaded:
+
+- **The whole file fails** (nothing loaded, logged as `FAILED` with the error) if a required column is missing or duplicated, the file cannot be opened, or it is not valid UTF-8 text (or contains NUL bytes).
+- **An extra column** is ignored, with a warning.
+- **An empty file** is logged as `EMPTY` (if it has a header, the header is still checked).
+- **Blank lines** are skipped. A line of only commas is treated as a row of empty values and rejected.
+
+Each rejected record stores the batch, row number, rule, a readable reason
+(including the bad value) and the original row as JSON, so it can be
 investigated without opening the file.
 
 ### Reconciliation
 
-* `audit.batch_reconciliation` - per file: `rows_read = rows_accepted + rows_rejected` (accepted rows are counted independently from raw, so this is a real check), and every source row is in raw or recorded as malformed.
-* `audit.layer_reconciliation` - 8 checks from staging to facts to metrics: counts, revenue totals, units, and **order subtotal = sum of item prices**.
+Two database views check that nothing is lost or counted twice:
 
-Both are exported to `outputs/` on every run; any failed layer check marks the run `FAILED`.
+- **`audit.batch_reconciliation`** – per file: rows read = rows accepted + rows rejected, and every source row is in `raw` or recorded as malformed. Accepted rows are counted independently, so this is a real check.
+- **`audit.layer_reconciliation`** – 8 checks from staging to facts to metrics: counts, revenue totals, units, and **order subtotal = sum of its item prices**.
 
----
-
-## 5. Metrics
-
-| # | Table | Definition |
-|---|---|---|
-| 1 | `monthly_store_revenue` | Per calendar month and store: `order_count` = non-empty orders; `revenue` = sum of `order_total`; `avg_order_value` = revenue / order_count |
-| 2 | `customer_summary` | Per customer with at least one non-empty order: first and last order date, `order_count`, `lifetime_value` = sum of `order_total`, `is_repeat_customer` = more than one order |
-| 3 | `monthly_product_sales` | Per calendar month and product: `units_sold` = item rows; `revenue` = sum of item prices (pre-tax); `total_cost` = sum of supply cost; `gross_margin` = revenue - total_cost |
-
-**Assumptions that affect the results**
-
-* Revenue in metrics 1 and 2 **includes tax** (it is what the customer paid); metric 3 is **pre-tax**, because tax is charged per order, not per product.
-* Empty orders (no items) are excluded from metrics 1 and 2. In this data they all have a total of 0, so revenue is unaffected but order counts and average order value are not inflated.
-* Only rows that passed data quality (or are EXCEPTION) are counted; INVALID and INVESTIGATE rows are excluded until fixed.
-* Months use `ordered_at` as given (no time-zone conversion).
-* The sample covers Sep 2016 - Feb 2017, when only the Philadelphia store was open.
+Both are exported to `outputs/` on every run. If any layer check fails, the run is marked `FAILED`.
 
 ---
 
-## 6. Incremental processing and recovery
+## Metrics
 
-The source has **no change tracking** (no `updated_at`, no change feed), so
-the pipeline uses two alternatives:
+**1. Monthly store revenue** (`monthly_store_revenue`) – per calendar month and store:
+- `order_count` = number of non-empty orders
+- `revenue` = sum of `order_total`
+- `avg_order_value` = revenue ÷ order_count
 
-1. **File-level: content hash as the checkpoint.** Each file's SHA-256 is
-   stored in `audit.ingestion_log`. A file whose hash was already loaded
-   successfully is `SKIPPED`; a partial unique index
-   (`file_hash WHERE status = 'SUCCESS'`) makes a double load impossible even
-   if the code had a bug. A new or changed file has a new hash and is loaded.
-2. **Record-level: business-key upserts.** Every load into staging and
-   analytics is `INSERT ... ON CONFLICT (key) DO UPDATE ... WHERE ... IS DISTINCT FROM ...`.
-   The same record twice gives one row; a corrected record replaces the old
-   one; re-running the same batch rewrites nothing. Each staging row records
-   the newest batch that delivered it (an identical re-send only updates that
-   batch number), and an upsert only applies when
-   `existing.batch_id <= new.batch_id`, so re-processing an **older** batch
-   (e.g. the re-check of held rows) can never overwrite newer data.
+**2. Customer summary** (`customer_summary`) – per customer with at least one non-empty order:
+- first and last order date, `order_count`
+- `lifetime_value` = sum of `order_total`
+- `is_repeat_customer` = more than one order
 
-| Question | Answer |
-|---|---|
-| How is processed data identified? | File hash with status `SUCCESS` (or `EMPTY`) in `audit.ingestion_log`. |
-| How are duplicates prevented? | Checkpoint (same file) + primary keys and upserts (same record in different files) + `duplicate_key` rule (same record within a file). |
-| How are corrections applied? | A later file containing the same key overwrites the row (the most recently loaded batch wins; an older batch never overwrites a newer one); metrics are rebuilt every run. Exception: a file whose exact content was loaded before is skipped, so reverting a file to an earlier version needs `--reset` (see README, Known limitations). |
-| Checkpoint / state? | `audit.ingestion_log` (per file) and `audit.pipeline_runs` (per run). |
-| How are failures detected? | Any error in a file rolls back that file's transaction and records `FAILED` with the error message; the run is marked `FAILED` and the process exits with code 1. The run result is written in a `finally` block on a fresh connection, so a lost connection or Ctrl+C is still recorded as `FAILED`. |
-| Two runs at once? | Prevented: each run takes a PostgreSQL advisory lock; a second run is refused and exits 1. |
-| How are failures recovered? | Run the same command again. The failed file never reached `SUCCESS`, so it is retried; files that succeeded are skipped. |
-| Late-arriving records? | A child whose parent has not arrived (e.g. an item before its order) is held as `INVESTIGATE`. Every run re-checks held batches and loads the rows whose parent now exists. Demonstrated: a failed orders file left 3,442 items held; the next run loaded the orders and then the items. |
+**3. Monthly product sales** (`monthly_product_sales`) – per calendar month and product:
+- `units_sold` = number of item rows
+- `revenue` = sum of item prices (before tax)
+- `total_cost` = sum of supply costs
+- `gross_margin` = revenue − total_cost
 
-**Why per-file transactions:** raw load, data-quality results and staging
-rows of a file are committed together or not at all, so a crash never leaves
-half a file behind. Transformations run afterwards in their own transaction;
-they are idempotent, so if they fail the next run simply runs them again.
+**Assumptions that affect the numbers**
+
+- Revenue in metrics 1 and 2 **includes tax** (what the customer paid). Metric 3 is **before tax**, because tax is charged per order, not per product.
+- Empty orders (no items) are left out of metrics 1 and 2. They all have a total of 0, so revenue is unaffected, but order counts and average order value are not inflated.
+- Only rows that passed data quality (including EXCEPTION rows) are counted. INVALID and INVESTIGATE rows are left out until they are fixed.
+- Months are based on `ordered_at` as given (no time-zone conversion).
+- The sample covers Sep 2016 – Feb 2017, when only the Philadelphia store was open.
 
 ---
 
-## 7. Testing
+## Incremental processing and recovery
 
-`tests/test_pipeline.py` - 21 tests, each running the real pipeline on a small
-dataset whose metrics were calculated by hand, in a separate `jaffle_test`
-database. They cover schema compliance (including a **deliberately invalid
-input**), invalid-record handling and categories, business-key uniqueness and
-corrections, referential integrity, record-count and aggregate
-reconciliation, transformation correctness, idempotency, failure recovery,
-empty and blank input, and run-level safety (concurrent and interrupted runs,
-unreachable database, missing files). The full list is in the [README](../README.md#5-tests).
+The source has **no change tracking** – no "updated at" column and no change
+feed. The pipeline uses two mechanisms instead.
 
-Results: `outputs/test_results.txt` (21 passed).
+**1. Files are recognised by their content.**
+Each file's SHA-256 hash is stored in `audit.ingestion_log`. A file whose hash
+was already loaded successfully is skipped. A unique index on
+`file_hash WHERE status = 'SUCCESS'` makes loading the same content twice
+impossible, even if the code had a bug. A new or changed file has a new hash
+and is loaded.
+
+**2. Records are matched on their business key.**
+Every load into staging and analytics is an upsert
+(`INSERT … ON CONFLICT (key) DO UPDATE … WHERE … IS DISTINCT FROM …`):
+
+- the same record twice gives one row,
+- a corrected record replaces the old one,
+- re-running the same batch rewrites nothing.
+
+Each staging row also remembers the newest batch that delivered it, and an
+update is only allowed when `existing.batch_id <= new.batch_id`. So
+re-processing an **older** batch (for example when held rows are re-checked)
+can never overwrite newer data.
+
+### Questions and answers
+
+**How does the pipeline know what is already processed?**
+By the file hash with status `SUCCESS` (or `EMPTY`) in `audit.ingestion_log`.
+
+**How are duplicates prevented?**
+Three layers: the file checkpoint (same file), primary keys with upserts (same
+record in different files) and the `duplicate_key` rule (same record within
+one file).
+
+**How are corrections applied?**
+A later file with the same key overwrites the row – the most recently loaded
+batch wins, and an older batch never overwrites a newer one. Metrics are
+rebuilt on every run. One exception: a file whose exact content was loaded
+before is skipped, so changing a file back to an earlier version needs
+`--reset` (see [Known limitations](../README.md#known-limitations)).
+
+**Where is the progress stored?**
+In `audit.ingestion_log` (one row per file) and `audit.pipeline_runs` (one row per run).
+
+**How are failures detected?**
+Any error in a file rolls back that file's transaction and records it as
+`FAILED` with the error message. The run is marked `FAILED` and exits with
+code 1. The run result is written in a `finally` block on a fresh database
+connection, so even a lost connection or Ctrl+C is recorded as `FAILED`.
+
+**What if two runs start at once?**
+Each run takes a PostgreSQL advisory lock. A second run is refused and exits with code 1.
+
+**How do you recover?**
+Run the same command again. The failed file never reached `SUCCESS`, so it is
+retried; files that succeeded are skipped.
+
+**What about late-arriving records?**
+A row whose parent has not arrived (for example an item before its order) is
+held as `INVESTIGATE`. Every run re-checks the held rows and loads those whose
+parent now exists. Demonstrated: a failed orders file left 3,442 items held;
+the next run loaded the orders and then the items.
+
+**Why one transaction per file?**
+A file's raw rows, data-quality results and staging rows are committed together
+or not at all, so a crash never leaves half a file behind. The transformations
+run afterwards in their own transaction; they give the same result every time,
+so if they fail, the next run simply runs them again.
 
 ---
 
-## 8. Performance, observability and reliability
+## Testing
 
-Measured numbers are in `outputs/benchmark.txt`: a full run of the
-6-month sample (39,599 rows) takes **~12 s** on a laptop, and a rerun with
-no new files **~2 s**. Everything below marked *proposal* is not
-implemented.
+`tests/test_pipeline.py` has **21 tests**. Each runs the real pipeline on a
+small dataset whose results were calculated by hand, in a separate
+`jaffle_test` database.
 
-| Topic | Current solution | At larger scale (*proposal*) |
-|---|---|---|
-| **Memory and partitioning** | One file is processed at a time; it is read fully into memory and sent to PostgreSQL with one `COPY`, so peak memory is about 6x the file size (measured once with a generated 82 MB, 1M-row file: ~530 MB; see `outputs/benchmark.txt`). Data is already split into monthly batches, which keeps files small. | Read files in chunks; range-partition `raw` and the fact tables by month so old partitions are untouched and can be archived. |
-| **SQL optimisation and indexing** | Primary keys on every business key; indexes on fact foreign keys and `order_date`; `(batch_id, row_num)` key on raw so each batch is read by index; unchanged rows skipped by `IS DISTINCT FROM`. | Check heavy queries with `EXPLAIN ANALYZE`; replace per-row PL/pgSQL safe casts (the main cost in validation) with set-based regex checks; rebuild only the affected months of metrics instead of all. |
-| **Batch or distributed processing** | Single-node batch is enough: the measured rate is ~4,500-5,500 rows/s for validation (varies between runs) (a generated 1M-row file loaded in ~3 minutes, measured once) and the full public dataset is only ~4x the sample. | Spark or a cloud warehouse would only be justified at hundreds of millions of rows; the same layered design and SQL would carry over. |
-| **Retry and controlled failure** | Downloads retry 3 times with backoff (2 s, 4 s). Data errors are never retried blindly: bad rows are rejected with a reason, bad files fail alone and are retried on the next run. | Scheduler-level retry of the whole run with a limit, then alert. |
-| **Structured logging and monitoring** | Every step logs timestamp, level, component, file, batch id, counts and duration to `outputs/logs/pipeline.log` and the console. Full history is queryable in `audit.pipeline_runs`, `audit.ingestion_log` and `audit.rejected_records`. | JSON log lines shipped to a log platform; a dashboard on the audit tables (rejection rate per rule, run duration). |
-| **Freshness and completion** | Run status (`SUCCESS`/`FAILED`) with file counts; reconciliation must pass; freshness check logs the newest order and warns when it is older than `monitoring.freshness_max_age_days` (disabled for this historical sample). | Expected-files check per day (e.g. alert if no orders file arrived). |
-| **Alerting, recovery and support** | Exit code 1 on failure lets any scheduler alert; recovery is "fix the cause, run the same command again". See the runbook in the README. | Schedule with Windows Task Scheduler or cron (or an Airflow DAG with one task per stage); alert on failed run, failed reconciliation, rejection rate above a threshold, or stale data. |
+They cover: schema checks (including a **deliberately invalid input**),
+invalid-record handling and categories, duplicates and corrections,
+referential integrity, reconciliation, metric correctness, safe reruns,
+failure recovery, empty and blank input, and run safety (concurrent and
+interrupted runs, unreachable database, missing files).
+
+The full list is in the [README](../README.md#tests). Latest result:
+`outputs/test_results.txt` (21 passed).
+
+---
+
+## Performance, observability and reliability
+
+**Measured** (see `outputs/benchmark.txt`): a full run of the 6-month sample
+(39,599 rows) takes **~12 s** on a laptop, and a run with no new files **~2 s**.
+Anything marked *"At larger scale"* below is a proposal, not implemented.
+
+### Memory and partitioning
+- **Now:** one file is processed at a time. It is read fully into memory and sent to PostgreSQL with one `COPY`, so peak memory is about 6× the file size (measured once with a generated 82 MB, 1M-row file: ~530 MB). Monthly files keep each batch small.
+- **At larger scale:** read files in chunks; partition `raw` and the fact tables by month, so old partitions stay untouched and can be archived.
+
+### SQL optimisation and indexing
+- **Now:** primary keys on every business key; indexes on the fact foreign keys and `order_date`; `raw` is keyed by `(batch_id, row_num)`, so each batch is read through the index; unchanged rows are skipped (`IS DISTINCT FROM`).
+- **At larger scale:** check heavy queries with `EXPLAIN ANALYZE`; replace the per-row safe-cast functions (the main cost of validation) with set-based checks; rebuild only the months a batch affects.
+
+### Batch or distributed processing
+- **Now:** a single machine is enough. Validation runs at roughly 4,500–5,500 rows/s (varies between runs); a generated 1M-row file loaded in about 3 minutes (measured once). The full public dataset is only about 4× the sample.
+- **At larger scale:** Spark or a cloud warehouse would only pay off at hundreds of millions of rows. The same layered design and SQL would carry over.
+
+### Retries and controlled failure
+- **Now:** downloads retry 3 times (after 2 s and 4 s). Data errors are never retried blindly: bad rows are rejected with a reason, and a bad file fails on its own and is retried on the next run.
+- **At larger scale:** let the scheduler retry the whole run a limited number of times, then alert.
+
+### Logging and monitoring
+- **Now:** every step logs the time, level, component, file, batch id, counts and duration to `outputs/logs/pipeline.log` and the console. The full history can be queried in `audit.pipeline_runs`, `audit.ingestion_log` and `audit.rejected_records`.
+- **At larger scale:** JSON log lines sent to a log platform, and a dashboard on the audit tables (rejection rate per rule, run duration).
+
+### Freshness and completion
+- **Now:** each run records its status and file counts; reconciliation must pass; the freshness check logs the newest order and warns when it is older than `monitoring.freshness_max_age_days` (switched off for this historical sample).
+- **At larger scale:** a check that the expected files arrived each day (for example, alert if no orders file came in).
+
+### Alerting, recovery and support
+- **Now:** exit code 1 on failure lets any scheduler raise an alert; recovery is "fix the cause, run the same command again" (see the failure table in the README).
+- **At larger scale:** an orchestrator such as Airflow with one task per stage, and alerts for failed runs, failed reconciliation, high rejection rates or stale data.
