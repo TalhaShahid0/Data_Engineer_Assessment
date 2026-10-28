@@ -1,0 +1,16 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.3.4, pluggy-1.7.0 -- C:\Users\Talha\Desktop\Data_Engineer_Assessment\venv\Scripts\python.exe
+rootdir: C:\Users\Talha\Desktop\Data_Engineer_Assessment
+collecting ... collected 9 items
+
+tests/test_pipeline.py::test_file_missing_required_column_is_rejected PASSED [ 11%]
+tests/test_pipeline.py::test_invalid_rows_are_rejected_with_rule_and_category PASSED [ 22%]
+tests/test_pipeline.py::test_corrected_record_updates_instead_of_duplicating PASSED [ 33%]
+tests/test_pipeline.py::test_no_orphan_records_reach_the_facts PASSED    [ 44%]
+tests/test_pipeline.py::test_reconciliation_balances_with_rejected_rows PASSED [ 55%]
+tests/test_pipeline.py::test_metrics_match_hand_calculated_values PASSED [ 66%]
+tests/test_pipeline.py::test_rerun_skips_loaded_files_and_changes_nothing PASSED [ 77%]
+tests/test_pipeline.py::test_failed_file_is_rolled_back_and_recovered_on_next_run PASSED [ 88%]
+tests/test_pipeline.py::test_empty_file_is_logged_and_does_not_fail_the_run PASSED [100%]
+
+============================== 9 passed in 9.10s ==============================

@@ -57,7 +57,7 @@ def log_batch(conn, run_id, table_name, file_name, file_hash, status, error_mess
                 (run_id, table_name, file_name, file_hash, status, error_message,
                  finished_at)
             VALUES (%s, %s, %s, %s, %s, %s,
-                    CASE WHEN %s = 'RUNNING' THEN NULL ELSE now() END)
+                    CASE WHEN %s = 'RUNNING' THEN NULL ELSE clock_timestamp() END)
             RETURNING batch_id
             """,
             (run_id, table_name, file_name, file_hash, status, error_message, status),

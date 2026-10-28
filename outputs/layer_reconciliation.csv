@@ -1,0 +1,9 @@
+check_name,expected,actual,passed
+orders: staging count = fct_orders count,15774,15774,t
+orders: staging order_total = fct_orders order_total,170294.45,170294.45,t
+items: staging count = fct_order_items count,22814,22814,t
+orders: subtotal = sum of item prices (mismatched orders),0,0,t
+metric 1: non-empty orders = sum(order_count),15649,15649,t
+metric 1: non-empty orders revenue = sum(revenue),170294.45,170294.45,t
+metric 2: non-empty orders revenue = sum(lifetime_value),170294.45,170294.45,t
+metric 3: fct_order_items count = sum(units_sold),22814,22814,t

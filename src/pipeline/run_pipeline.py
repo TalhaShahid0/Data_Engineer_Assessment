@@ -67,7 +67,7 @@ def process_file(conn, run_id, table, path, simulate_failure=None):
                 raise SimulatedFailure(f"simulated failure while processing {path.name}")
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE audit.ingestion_log SET status = 'SUCCESS', finished_at = now() "
+                    "UPDATE audit.ingestion_log SET status = 'SUCCESS', finished_at = clock_timestamp() "
                     "WHERE batch_id = %s",
                     (result["batch_id"],),
                 )
@@ -176,7 +176,7 @@ def run_pipeline(config, data_dir=None, reset=False, simulate_failure=None):
     with conn.cursor() as cur:
         cur.execute(
             """UPDATE audit.pipeline_runs
-               SET status = %s, finished_at = now(), error_message = %s,
+               SET status = %s, finished_at = clock_timestamp(), error_message = %s,
                    files_processed = %s, files_skipped = %s, files_failed = %s
                WHERE run_id = %s""",
             (status, error_message, counts["SUCCESS"] + counts["EMPTY"], counts["SKIPPED"],

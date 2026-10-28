@@ -433,12 +433,12 @@ SELECT 'metric 1: non-empty orders = sum(order_count)',
        (SELECT count(*) FROM analytics.fct_orders WHERE item_count > 0),
        (SELECT COALESCE(sum(order_count), 0) FROM analytics.monthly_store_revenue)
 UNION ALL
-SELECT 'metric 1: fct_orders revenue = sum(revenue)',
-       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders),
+SELECT 'metric 1: non-empty orders revenue = sum(revenue)',
+       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders WHERE item_count > 0),
        (SELECT COALESCE(sum(revenue), 0) FROM analytics.monthly_store_revenue)
 UNION ALL
-SELECT 'metric 2: fct_orders revenue = sum(lifetime_value)',
-       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders),
+SELECT 'metric 2: non-empty orders revenue = sum(lifetime_value)',
+       (SELECT COALESCE(sum(order_total), 0) FROM analytics.fct_orders WHERE item_count > 0),
        (SELECT COALESCE(sum(lifetime_value), 0) FROM analytics.customer_summary)
 UNION ALL
 SELECT 'metric 3: fct_order_items count = sum(units_sold)',

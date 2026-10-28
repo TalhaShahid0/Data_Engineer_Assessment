@@ -10,8 +10,8 @@
 --
 -- Metric rules (see docs/architecture.md):
 --   - revenue      = order_total (includes tax), in dollars
---   - empty orders = orders with no items (total 0); excluded from order
---                    counts and average order value
+--   - empty orders = orders with no items (in the source these all have a
+--                    total of 0); excluded from metrics 1 and 2
 --   - only records that passed data quality reach staging, so rejected
 --     records are excluded automatically
 -- =====================================================================

@@ -1,0 +1,61 @@
+month,sku,product_name,product_type,units_sold,revenue,total_cost,gross_margin
+2016-09-01,BEV-001,tangaroo,beverage,370,2220.00,303.40,1916.60
+2016-09-01,BEV-002,chai and mighty,beverage,384,1920.00,672.00,1248.00
+2016-09-01,BEV-003,vanilla ice,beverage,343,2058.00,528.22,1529.78
+2016-09-01,BEV-004,for richer or pourover,beverage,351,2457.00,287.82,2169.18
+2016-09-01,BEV-005,adele-ade,beverage,363,1452.00,228.69,1223.31
+2016-09-01,JAF-001,nutellaphone who dis?,jaffle,76,836.00,91.96,744.04
+2016-09-01,JAF-002,doctor stew,jaffle,90,990.00,225.90,764.10
+2016-09-01,JAF-003,the krautback,jaffle,96,1152.00,351.36,800.64
+2016-09-01,JAF-004,flame impala,jaffle,95,1330.00,325.85,1004.15
+2016-09-01,JAF-005,mel-bun,jaffle,92,1104.00,219.88,884.12
+2016-10-01,BEV-001,tangaroo,beverage,407,2442.00,333.74,2108.26
+2016-10-01,BEV-002,chai and mighty,beverage,428,2140.00,749.00,1391.00
+2016-10-01,BEV-003,vanilla ice,beverage,379,2274.00,583.66,1690.34
+2016-10-01,BEV-004,for richer or pourover,beverage,426,2982.00,349.32,2632.68
+2016-10-01,BEV-005,adele-ade,beverage,368,1472.00,231.84,1240.16
+2016-10-01,JAF-001,nutellaphone who dis?,jaffle,124,1364.00,150.04,1213.96
+2016-10-01,JAF-002,doctor stew,jaffle,102,1122.00,256.02,865.98
+2016-10-01,JAF-003,the krautback,jaffle,116,1392.00,424.56,967.44
+2016-10-01,JAF-004,flame impala,jaffle,130,1820.00,445.90,1374.10
+2016-10-01,JAF-005,mel-bun,jaffle,121,1452.00,289.19,1162.81
+2016-11-01,BEV-001,tangaroo,beverage,547,3282.00,448.54,2833.46
+2016-11-01,BEV-002,chai and mighty,beverage,526,2630.00,920.50,1709.50
+2016-11-01,BEV-003,vanilla ice,beverage,536,3216.00,825.44,2390.56
+2016-11-01,BEV-004,for richer or pourover,beverage,541,3787.00,443.62,3343.38
+2016-11-01,BEV-005,adele-ade,beverage,542,2168.00,341.46,1826.54
+2016-11-01,JAF-001,nutellaphone who dis?,jaffle,149,1639.00,180.29,1458.71
+2016-11-01,JAF-002,doctor stew,jaffle,157,1727.00,394.07,1332.93
+2016-11-01,JAF-003,the krautback,jaffle,154,1848.00,563.64,1284.36
+2016-11-01,JAF-004,flame impala,jaffle,153,2142.00,524.79,1617.21
+2016-11-01,JAF-005,mel-bun,jaffle,137,1644.00,327.43,1316.57
+2016-12-01,BEV-001,tangaroo,beverage,735,4410.00,602.70,3807.30
+2016-12-01,BEV-002,chai and mighty,beverage,638,3190.00,1116.50,2073.50
+2016-12-01,BEV-003,vanilla ice,beverage,699,4194.00,1076.46,3117.54
+2016-12-01,BEV-004,for richer or pourover,beverage,680,4760.00,557.60,4202.40
+2016-12-01,BEV-005,adele-ade,beverage,657,2628.00,413.91,2214.09
+2016-12-01,JAF-001,nutellaphone who dis?,jaffle,221,2431.00,267.41,2163.59
+2016-12-01,JAF-002,doctor stew,jaffle,204,2244.00,512.04,1731.96
+2016-12-01,JAF-003,the krautback,jaffle,198,2376.00,724.68,1651.32
+2016-12-01,JAF-004,flame impala,jaffle,199,2786.00,682.57,2103.43
+2016-12-01,JAF-005,mel-bun,jaffle,182,2184.00,434.98,1749.02
+2017-01-01,BEV-001,tangaroo,beverage,824,4944.00,675.68,4268.32
+2017-01-01,BEV-002,chai and mighty,beverage,804,4020.00,1407.00,2613.00
+2017-01-01,BEV-003,vanilla ice,beverage,754,4524.00,1161.16,3362.84
+2017-01-01,BEV-004,for richer or pourover,beverage,784,5488.00,642.88,4845.12
+2017-01-01,BEV-005,adele-ade,beverage,752,3008.00,473.76,2534.24
+2017-01-01,JAF-001,nutellaphone who dis?,jaffle,234,2574.00,283.14,2290.86
+2017-01-01,JAF-002,doctor stew,jaffle,240,2640.00,602.40,2037.60
+2017-01-01,JAF-003,the krautback,jaffle,229,2748.00,838.14,1909.86
+2017-01-01,JAF-004,flame impala,jaffle,215,3010.00,737.45,2272.55
+2017-01-01,JAF-005,mel-bun,jaffle,258,3096.00,616.62,2479.38
+2017-02-01,BEV-001,tangaroo,beverage,790,4740.00,647.80,4092.20
+2017-02-01,BEV-002,chai and mighty,beverage,772,3860.00,1351.00,2509.00
+2017-02-01,BEV-003,vanilla ice,beverage,775,4650.00,1193.50,3456.50
+2017-02-01,BEV-004,for richer or pourover,beverage,814,5698.00,667.48,5030.52
+2017-02-01,BEV-005,adele-ade,beverage,735,2940.00,463.05,2476.95
+2017-02-01,JAF-001,nutellaphone who dis?,jaffle,206,2266.00,249.26,2016.74
+2017-02-01,JAF-002,doctor stew,jaffle,211,2321.00,529.61,1791.39
+2017-02-01,JAF-003,the krautback,jaffle,242,2904.00,885.72,2018.28
+2017-02-01,JAF-004,flame impala,jaffle,230,3220.00,788.90,2431.10
+2017-02-01,JAF-005,mel-bun,jaffle,229,2748.00,547.31,2200.69

@@ -1,0 +1,17 @@
+batch_id,table_name,file_name,rows_read,rows_in_raw,rows_malformed,rows_accepted,rows_rejected,rows_flagged,counts_balance,raw_complete
+1,stores,raw_stores.csv,6,6,0,6,0,0,t,t
+2,customers,raw_customers.csv,930,930,0,930,0,0,t,t
+3,products,raw_products.csv,10,10,0,10,0,0,t,t
+4,supplies,raw_supplies.csv,65,65,0,65,0,0,t,t
+5,orders,orders_2016_09.csv,1611,1611,0,1611,0,14,t,t
+6,orders,orders_2016_10.csv,1805,1805,0,1805,0,18,t,t
+7,orders,orders_2016_11.csv,2380,2380,0,2380,0,19,t,t
+8,orders,orders_2016_12.csv,2996,2996,0,2996,0,14,t,t
+9,orders,orders_2017_01.csv,3502,3502,0,3502,0,32,t,t
+10,orders,orders_2017_02.csv,3480,3480,0,3480,0,28,t,t
+11,items,items_2016_09.csv,2260,2260,0,2260,0,0,t,t
+12,items,items_2016_10.csv,2601,2601,0,2601,0,0,t,t
+13,items,items_2016_11.csv,3442,3442,0,3442,0,0,t,t
+14,items,items_2016_12.csv,4413,4413,0,4413,0,0,t,t
+15,items,items_2017_01.csv,5094,5094,0,5094,0,0,t,t
+16,items,items_2017_02.csv,5004,5004,0,5004,0,0,t,t

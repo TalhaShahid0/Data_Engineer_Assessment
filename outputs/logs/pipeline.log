@@ -1,0 +1,252 @@
+2026-10-28 21:48:29,361 | INFO    | pipeline | Schema created from schema.sql
+2026-10-28 21:48:29,370 | INFO    | pipeline | ===== Run 1 started (data: C:\Users\Talha\Desktop\Data_Engineer_Assessment\data\sample) =====
+2026-10-28 21:48:29,387 | INFO    | ingest | stores: loaded raw_stores.csv into raw (batch 1, 6 rows read, 0 malformed)
+2026-10-28 21:48:29,423 | INFO    | validate | stores: batch 1 validated - read 6, accepted 6, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:29,423 | INFO    | pipeline | stores: raw_stores.csv -> SUCCESS in 0.05s
+2026-10-28 21:48:29,457 | INFO    | ingest | customers: loaded raw_customers.csv into raw (batch 2, 930 rows read, 0 malformed)
+2026-10-28 21:48:29,565 | INFO    | validate | customers: batch 2 validated - read 930, accepted 930, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:29,565 | INFO    | pipeline | customers: raw_customers.csv -> SUCCESS in 0.15s
+2026-10-28 21:48:29,581 | INFO    | ingest | products: loaded raw_products.csv into raw (batch 3, 10 rows read, 0 malformed)
+2026-10-28 21:48:29,601 | INFO    | validate | products: batch 3 validated - read 10, accepted 10, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:29,603 | INFO    | pipeline | products: raw_products.csv -> SUCCESS in 0.02s
+2026-10-28 21:48:29,612 | INFO    | ingest | supplies: loaded raw_supplies.csv into raw (batch 4, 65 rows read, 0 malformed)
+2026-10-28 21:48:29,638 | INFO    | validate | supplies: batch 4 validated - read 65, accepted 65, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:29,639 | INFO    | pipeline | supplies: raw_supplies.csv -> SUCCESS in 0.03s
+2026-10-28 21:48:29,715 | INFO    | ingest | orders: loaded orders_2016_09.csv into raw (batch 5, 1611 rows read, 0 malformed)
+2026-10-28 21:48:29,991 | INFO    | validate | orders: batch 5 validated - read 1611, accepted 1611, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:48:29,991 | INFO    | pipeline | orders: orders_2016_09.csv -> SUCCESS in 0.35s
+2026-10-28 21:48:30,087 | INFO    | ingest | orders: loaded orders_2016_10.csv into raw (batch 6, 1805 rows read, 0 malformed)
+2026-10-28 21:48:30,607 | INFO    | validate | orders: batch 6 validated - read 1805, accepted 1805, rejected 0, flagged 18 | rules hit: zero_value_order (EXCEPTION): 18
+2026-10-28 21:48:30,702 | INFO    | pipeline | orders: orders_2016_10.csv -> SUCCESS in 0.71s
+2026-10-28 21:48:30,789 | INFO    | ingest | orders: loaded orders_2016_11.csv into raw (batch 7, 2380 rows read, 0 malformed)
+2026-10-28 21:48:31,165 | INFO    | validate | orders: batch 7 validated - read 2380, accepted 2380, rejected 0, flagged 19 | rules hit: zero_value_order (EXCEPTION): 19
+2026-10-28 21:48:31,167 | INFO    | pipeline | orders: orders_2016_11.csv -> SUCCESS in 0.46s
+2026-10-28 21:48:31,249 | INFO    | ingest | orders: loaded orders_2016_12.csv into raw (batch 8, 2996 rows read, 0 malformed)
+2026-10-28 21:48:31,730 | INFO    | validate | orders: batch 8 validated - read 2996, accepted 2996, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:48:31,747 | INFO    | pipeline | orders: orders_2016_12.csv -> SUCCESS in 0.58s
+2026-10-28 21:48:31,858 | INFO    | ingest | orders: loaded orders_2017_01.csv into raw (batch 9, 3502 rows read, 0 malformed)
+2026-10-28 21:48:32,431 | INFO    | validate | orders: batch 9 validated - read 3502, accepted 3502, rejected 0, flagged 32 | rules hit: zero_value_order (EXCEPTION): 32
+2026-10-28 21:48:32,434 | INFO    | pipeline | orders: orders_2017_01.csv -> SUCCESS in 0.68s
+2026-10-28 21:48:32,534 | INFO    | ingest | orders: loaded orders_2017_02.csv into raw (batch 10, 3480 rows read, 0 malformed)
+2026-10-28 21:48:33,099 | INFO    | validate | orders: batch 10 validated - read 3480, accepted 3480, rejected 0, flagged 28 | rules hit: zero_value_order (EXCEPTION): 28
+2026-10-28 21:48:33,102 | INFO    | pipeline | orders: orders_2017_02.csv -> SUCCESS in 0.66s
+2026-10-28 21:48:33,169 | INFO    | ingest | items: loaded items_2016_09.csv into raw (batch 11, 2260 rows read, 0 malformed)
+2026-10-28 21:48:33,392 | INFO    | validate | items: batch 11 validated - read 2260, accepted 2260, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:33,395 | INFO    | pipeline | items: items_2016_09.csv -> SUCCESS in 0.29s
+2026-10-28 21:48:33,472 | INFO    | ingest | items: loaded items_2016_10.csv into raw (batch 12, 2601 rows read, 0 malformed)
+2026-10-28 21:48:33,712 | INFO    | validate | items: batch 12 validated - read 2601, accepted 2601, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:33,714 | INFO    | pipeline | items: items_2016_10.csv -> SUCCESS in 0.32s
+2026-10-28 21:48:33,809 | INFO    | ingest | items: loaded items_2016_11.csv into raw (batch 13, 3442 rows read, 0 malformed)
+2026-10-28 21:48:34,122 | INFO    | validate | items: batch 13 validated - read 3442, accepted 3442, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:34,125 | INFO    | pipeline | items: items_2016_11.csv -> SUCCESS in 0.41s
+2026-10-28 21:48:34,241 | INFO    | ingest | items: loaded items_2016_12.csv into raw (batch 14, 4413 rows read, 0 malformed)
+2026-10-28 21:48:34,663 | INFO    | validate | items: batch 14 validated - read 4413, accepted 4413, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:34,663 | INFO    | pipeline | items: items_2016_12.csv -> SUCCESS in 0.54s
+2026-10-28 21:48:34,807 | INFO    | ingest | items: loaded items_2017_01.csv into raw (batch 15, 5094 rows read, 0 malformed)
+2026-10-28 21:48:35,403 | INFO    | validate | items: batch 15 validated - read 5094, accepted 5094, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:35,406 | INFO    | pipeline | items: items_2017_01.csv -> SUCCESS in 0.73s
+2026-10-28 21:48:35,545 | INFO    | ingest | items: loaded items_2017_02.csv into raw (batch 16, 5004 rows read, 0 malformed)
+2026-10-28 21:48:36,019 | INFO    | validate | items: batch 16 validated - read 5004, accepted 5004, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:36,096 | INFO    | pipeline | items: items_2017_02.csv -> SUCCESS in 0.69s
+2026-10-28 21:48:38,459 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=15774, fct_order_items=22814, monthly_store_revenue=6, customer_summary=338, monthly_product_sales=60
+2026-10-28 21:48:38,639 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:48:38,649 | INFO    | pipeline | Transformations finished in 2.55s
+2026-10-28 21:48:38,660 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:48:38,876 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:48:38,879 | INFO    | pipeline | Freshness: newest order is 2017-02-28 19:30:00
+2026-10-28 21:48:38,881 | INFO    | pipeline | ===== Run 1 SUCCESS in 9.9s | loaded 16, empty 0, skipped 0, failed 0 =====
+2026-10-28 21:48:39,299 | INFO    | pipeline | ===== Run 2 started (data: C:\Users\Talha\Desktop\Data_Engineer_Assessment\data\sample) =====
+2026-10-28 21:48:39,302 | INFO    | pipeline | stores: raw_stores.csv already loaded (same content), skipped
+2026-10-28 21:48:39,312 | INFO    | pipeline | customers: raw_customers.csv already loaded (same content), skipped
+2026-10-28 21:48:39,315 | INFO    | pipeline | products: raw_products.csv already loaded (same content), skipped
+2026-10-28 21:48:39,317 | INFO    | pipeline | supplies: raw_supplies.csv already loaded (same content), skipped
+2026-10-28 21:48:39,322 | INFO    | pipeline | orders: orders_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:39,325 | INFO    | pipeline | orders: orders_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:39,328 | INFO    | pipeline | orders: orders_2016_11.csv already loaded (same content), skipped
+2026-10-28 21:48:39,331 | INFO    | pipeline | orders: orders_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:39,335 | INFO    | pipeline | orders: orders_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:39,339 | INFO    | pipeline | orders: orders_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:39,344 | INFO    | pipeline | items: items_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:39,347 | INFO    | pipeline | items: items_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:39,352 | INFO    | pipeline | items: items_2016_11.csv already loaded (same content), skipped
+2026-10-28 21:48:39,352 | INFO    | pipeline | items: items_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:39,361 | INFO    | pipeline | items: items_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:39,365 | INFO    | pipeline | items: items_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:40,026 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=15774, fct_order_items=22814, monthly_store_revenue=6, customer_summary=338, monthly_product_sales=60
+2026-10-28 21:48:40,242 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:48:40,266 | INFO    | pipeline | Transformations finished in 0.90s
+2026-10-28 21:48:40,312 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:48:40,858 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:48:40,861 | INFO    | pipeline | Freshness: newest order is 2017-02-28 19:30:00
+2026-10-28 21:48:40,862 | INFO    | pipeline | ===== Run 2 SUCCESS in 1.6s | loaded 0, empty 0, skipped 16, failed 0 =====
+2026-10-28 21:48:41,843 | INFO    | pipeline | Schema created from schema.sql
+2026-10-28 21:48:41,851 | INFO    | pipeline | ===== Run 1 started (data: C:\Users\Talha\Desktop\Data_Engineer_Assessment\data\sample) =====
+2026-10-28 21:48:41,867 | INFO    | ingest | stores: loaded raw_stores.csv into raw (batch 1, 6 rows read, 0 malformed)
+2026-10-28 21:48:41,896 | INFO    | validate | stores: batch 1 validated - read 6, accepted 6, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:41,898 | INFO    | pipeline | stores: raw_stores.csv -> SUCCESS in 0.04s
+2026-10-28 21:48:41,924 | INFO    | ingest | customers: loaded raw_customers.csv into raw (batch 2, 930 rows read, 0 malformed)
+2026-10-28 21:48:41,991 | INFO    | validate | customers: batch 2 validated - read 930, accepted 930, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:41,991 | INFO    | pipeline | customers: raw_customers.csv -> SUCCESS in 0.10s
+2026-10-28 21:48:41,991 | INFO    | ingest | products: loaded raw_products.csv into raw (batch 3, 10 rows read, 0 malformed)
+2026-10-28 21:48:42,010 | INFO    | validate | products: batch 3 validated - read 10, accepted 10, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:42,010 | INFO    | pipeline | products: raw_products.csv -> SUCCESS in 0.02s
+2026-10-28 21:48:42,010 | INFO    | ingest | supplies: loaded raw_supplies.csv into raw (batch 4, 65 rows read, 0 malformed)
+2026-10-28 21:48:42,036 | INFO    | validate | supplies: batch 4 validated - read 65, accepted 65, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:42,037 | INFO    | pipeline | supplies: raw_supplies.csv -> SUCCESS in 0.02s
+2026-10-28 21:48:42,103 | INFO    | ingest | orders: loaded orders_2016_09.csv into raw (batch 5, 1611 rows read, 0 malformed)
+2026-10-28 21:48:42,373 | INFO    | validate | orders: batch 5 validated - read 1611, accepted 1611, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:48:42,374 | INFO    | pipeline | orders: orders_2016_09.csv -> SUCCESS in 0.33s
+2026-10-28 21:48:42,436 | INFO    | ingest | orders: loaded orders_2016_10.csv into raw (batch 6, 1805 rows read, 0 malformed)
+2026-10-28 21:48:42,856 | INFO    | validate | orders: batch 6 validated - read 1805, accepted 1805, rejected 0, flagged 18 | rules hit: zero_value_order (EXCEPTION): 18
+2026-10-28 21:48:42,856 | INFO    | pipeline | orders: orders_2016_10.csv -> SUCCESS in 0.48s
+2026-10-28 21:48:42,944 | INFO    | ingest | orders: loaded orders_2016_11.csv into raw (batch 7, 2380 rows read, 0 malformed)
+2026-10-28 21:48:43,375 | INFO    | validate | orders: batch 7 validated - read 2380, accepted 2380, rejected 0, flagged 19 | rules hit: zero_value_order (EXCEPTION): 19
+2026-10-28 21:48:43,378 | ERROR   | pipeline | orders: orders_2016_11.csv FAILED and was rolled back: simulated failure while processing orders_2016_11.csv
+2026-10-28 21:48:43,480 | INFO    | ingest | orders: loaded orders_2016_12.csv into raw (batch 9, 2996 rows read, 0 malformed)
+2026-10-28 21:48:43,984 | INFO    | validate | orders: batch 9 validated - read 2996, accepted 2996, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:48:43,988 | INFO    | pipeline | orders: orders_2016_12.csv -> SUCCESS in 0.60s
+2026-10-28 21:48:44,099 | INFO    | ingest | orders: loaded orders_2017_01.csv into raw (batch 10, 3502 rows read, 0 malformed)
+2026-10-28 21:48:44,670 | INFO    | validate | orders: batch 10 validated - read 3502, accepted 3502, rejected 0, flagged 32 | rules hit: zero_value_order (EXCEPTION): 32
+2026-10-28 21:48:44,671 | INFO    | pipeline | orders: orders_2017_01.csv -> SUCCESS in 0.68s
+2026-10-28 21:48:44,782 | INFO    | ingest | orders: loaded orders_2017_02.csv into raw (batch 11, 3480 rows read, 0 malformed)
+2026-10-28 21:48:45,333 | INFO    | validate | orders: batch 11 validated - read 3480, accepted 3480, rejected 0, flagged 28 | rules hit: zero_value_order (EXCEPTION): 28
+2026-10-28 21:48:45,335 | INFO    | pipeline | orders: orders_2017_02.csv -> SUCCESS in 0.66s
+2026-10-28 21:48:45,394 | INFO    | ingest | items: loaded items_2016_09.csv into raw (batch 12, 2260 rows read, 0 malformed)
+2026-10-28 21:48:45,620 | INFO    | validate | items: batch 12 validated - read 2260, accepted 2260, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:45,623 | INFO    | pipeline | items: items_2016_09.csv -> SUCCESS in 0.29s
+2026-10-28 21:48:45,698 | INFO    | ingest | items: loaded items_2016_10.csv into raw (batch 13, 2601 rows read, 0 malformed)
+2026-10-28 21:48:46,045 | INFO    | validate | items: batch 13 validated - read 2601, accepted 2601, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:46,049 | INFO    | pipeline | items: items_2016_10.csv -> SUCCESS in 0.42s
+2026-10-28 21:48:46,294 | INFO    | ingest | items: loaded items_2016_11.csv into raw (batch 14, 3442 rows read, 0 malformed)
+2026-10-28 21:48:47,164 | INFO    | validate | items: batch 14 validated - read 3442, accepted 0, rejected 3442, flagged 0 | rules hit: unknown_order (INVESTIGATE): 3442
+2026-10-28 21:48:47,167 | INFO    | pipeline | items: items_2016_11.csv -> SUCCESS in 1.11s
+2026-10-28 21:48:47,306 | INFO    | ingest | items: loaded items_2016_12.csv into raw (batch 15, 4413 rows read, 0 malformed)
+2026-10-28 21:48:47,736 | INFO    | validate | items: batch 15 validated - read 4413, accepted 4413, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:47,739 | INFO    | pipeline | items: items_2016_12.csv -> SUCCESS in 0.57s
+2026-10-28 21:48:47,886 | INFO    | ingest | items: loaded items_2017_01.csv into raw (batch 16, 5094 rows read, 0 malformed)
+2026-10-28 21:48:48,342 | INFO    | validate | items: batch 16 validated - read 5094, accepted 5094, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:48,355 | INFO    | pipeline | items: items_2017_01.csv -> SUCCESS in 0.61s
+2026-10-28 21:48:48,488 | INFO    | ingest | items: loaded items_2017_02.csv into raw (batch 17, 5004 rows read, 0 malformed)
+2026-10-28 21:48:48,937 | INFO    | validate | items: batch 17 validated - read 5004, accepted 5004, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:48,939 | INFO    | pipeline | items: items_2017_02.csv -> SUCCESS in 0.58s
+2026-10-28 21:48:49,801 | INFO    | validate | items: batch 14 validated - read 3442, accepted 0, rejected 3442, flagged 0 | rules hit: unknown_order (INVESTIGATE): 3442
+2026-10-28 21:48:51,736 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=13394, fct_order_items=19372, monthly_store_revenue=5, customer_summary=338, monthly_product_sales=50
+2026-10-28 21:48:51,884 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:48:51,899 | INFO    | pipeline | Transformations finished in 2.10s
+2026-10-28 21:48:51,943 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:48:52,105 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:48:52,105 | INFO    | pipeline | Freshness: newest order is 2017-02-28 19:30:00
+2026-10-28 21:48:52,105 | INFO    | pipeline | ===== Run 1 FAILED in 10.9s | loaded 15, empty 0, skipped 0, failed 1 | 1 file(s) failed =====
+2026-10-28 21:48:52,539 | INFO    | pipeline | ===== Run 2 started (data: C:\Users\Talha\Desktop\Data_Engineer_Assessment\data\sample) =====
+2026-10-28 21:48:52,547 | INFO    | pipeline | stores: raw_stores.csv already loaded (same content), skipped
+2026-10-28 21:48:52,550 | INFO    | pipeline | customers: raw_customers.csv already loaded (same content), skipped
+2026-10-28 21:48:52,552 | INFO    | pipeline | products: raw_products.csv already loaded (same content), skipped
+2026-10-28 21:48:52,557 | INFO    | pipeline | supplies: raw_supplies.csv already loaded (same content), skipped
+2026-10-28 21:48:52,562 | INFO    | pipeline | orders: orders_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:52,565 | INFO    | pipeline | orders: orders_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:52,741 | INFO    | ingest | orders: loaded orders_2016_11.csv into raw (batch 24, 2380 rows read, 0 malformed)
+2026-10-28 21:48:53,212 | INFO    | validate | orders: batch 24 validated - read 2380, accepted 2380, rejected 0, flagged 19 | rules hit: zero_value_order (EXCEPTION): 19
+2026-10-28 21:48:53,214 | INFO    | pipeline | orders: orders_2016_11.csv -> SUCCESS in 0.65s
+2026-10-28 21:48:53,223 | INFO    | pipeline | orders: orders_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:53,223 | INFO    | pipeline | orders: orders_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:53,223 | INFO    | pipeline | orders: orders_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:53,237 | INFO    | pipeline | items: items_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:53,242 | INFO    | pipeline | items: items_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:53,246 | INFO    | pipeline | items: items_2016_11.csv already loaded (same content), skipped
+2026-10-28 21:48:53,250 | INFO    | pipeline | items: items_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:53,254 | INFO    | pipeline | items: items_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:53,254 | INFO    | pipeline | items: items_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:53,786 | INFO    | validate | items: batch 14 validated - read 3442, accepted 3442, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:53,786 | INFO    | pipeline | items: batch 14 re-checked, 3442 previously held row(s) now loaded
+2026-10-28 21:48:54,591 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=15774, fct_order_items=22814, monthly_store_revenue=6, customer_summary=338, monthly_product_sales=60
+2026-10-28 21:48:54,786 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:48:54,805 | INFO    | pipeline | Transformations finished in 1.02s
+2026-10-28 21:48:54,832 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:48:55,032 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:48:55,033 | INFO    | pipeline | Freshness: newest order is 2017-02-28 19:30:00
+2026-10-28 21:48:55,033 | INFO    | pipeline | ===== Run 2 SUCCESS in 2.6s | loaded 1, empty 0, skipped 15, failed 0 =====
+2026-10-28 21:48:55,505 | INFO    | pipeline | ===== Run 3 started (data: C:\Users\Talha\AppData\Local\Temp\claude\C--Users-Talha-Desktop-Data-Engineer-Assessment\1f4dca0f-a52e-49f3-ab53-20b3f1ac7d40\scratchpad\demo_data) =====
+2026-10-28 21:48:55,515 | INFO    | pipeline | stores: raw_stores.csv already loaded (same content), skipped
+2026-10-28 21:48:55,527 | INFO    | pipeline | customers: raw_customers.csv already loaded (same content), skipped
+2026-10-28 21:48:55,531 | INFO    | pipeline | products: raw_products.csv already loaded (same content), skipped
+2026-10-28 21:48:55,535 | INFO    | pipeline | supplies: raw_supplies.csv already loaded (same content), skipped
+2026-10-28 21:48:55,543 | INFO    | pipeline | orders: orders_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:55,557 | INFO    | pipeline | orders: orders_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:55,562 | INFO    | pipeline | orders: orders_2016_11.csv already loaded (same content), skipped
+2026-10-28 21:48:55,576 | INFO    | pipeline | orders: orders_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:55,599 | INFO    | pipeline | orders: orders_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:55,610 | INFO    | pipeline | orders: orders_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:55,633 | INFO    | ingest | orders: loaded orders_2017_03_dirty.csv into raw (batch 44, 12 rows read, 1 malformed)
+2026-10-28 21:48:55,669 | INFO    | validate | orders: batch 44 validated - read 12, accepted 2, rejected 10, flagged 1 | rules hit: malformed_row (INVALID): 1, before_store_opened (INVESTIGATE): 1, total_rounding (EXCEPTION): 1, missing_required (INVALID): 1, invalid_amount (INVALID): 1, duplicate_key (INVALID): 1, negative_amount (INVALID): 1, invalid_timestamp (INVALID): 1, invalid_uuid (INVALID): 1, total_mismatch (INVESTIGATE): 1, unknown_customer (INVESTIGATE): 1
+2026-10-28 21:48:55,669 | INFO    | pipeline | orders: orders_2017_03_dirty.csv -> SUCCESS in 0.05s
+2026-10-28 21:48:55,680 | INFO    | pipeline | items: items_2016_09.csv already loaded (same content), skipped
+2026-10-28 21:48:55,705 | INFO    | pipeline | items: items_2016_10.csv already loaded (same content), skipped
+2026-10-28 21:48:55,721 | INFO    | pipeline | items: items_2016_11.csv already loaded (same content), skipped
+2026-10-28 21:48:55,734 | INFO    | pipeline | items: items_2016_12.csv already loaded (same content), skipped
+2026-10-28 21:48:55,751 | INFO    | pipeline | items: items_2017_01.csv already loaded (same content), skipped
+2026-10-28 21:48:55,769 | INFO    | pipeline | items: items_2017_02.csv already loaded (same content), skipped
+2026-10-28 21:48:55,784 | INFO    | validate | orders: batch 44 validated - read 12, accepted 2, rejected 10, flagged 1 | rules hit: malformed_row (INVALID): 1, before_store_opened (INVESTIGATE): 1, total_rounding (EXCEPTION): 1, missing_required (INVALID): 1, invalid_amount (INVALID): 1, duplicate_key (INVALID): 1, negative_amount (INVALID): 1, invalid_timestamp (INVALID): 1, invalid_uuid (INVALID): 1, total_mismatch (INVESTIGATE): 1, unknown_customer (INVESTIGATE): 1
+2026-10-28 21:48:56,280 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=15776, fct_order_items=22814, monthly_store_revenue=6, customer_summary=338, monthly_product_sales=60
+2026-10-28 21:48:56,496 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:48:56,515 | INFO    | pipeline | Transformations finished in 0.73s
+2026-10-28 21:48:56,541 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:48:56,737 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:48:56,740 | INFO    | pipeline | Freshness: newest order is 2017-03-01 10:30:00
+2026-10-28 21:48:56,742 | INFO    | pipeline | ===== Run 3 SUCCESS in 1.3s | loaded 1, empty 0, skipped 16, failed 0 =====
+2026-10-28 21:48:57,587 | INFO    | pipeline | Schema created from schema.sql
+2026-10-28 21:48:57,595 | INFO    | pipeline | ===== Run 1 started (data: C:\Users\Talha\Desktop\Data_Engineer_Assessment\data\sample) =====
+2026-10-28 21:48:57,610 | INFO    | ingest | stores: loaded raw_stores.csv into raw (batch 1, 6 rows read, 0 malformed)
+2026-10-28 21:48:57,640 | INFO    | validate | stores: batch 1 validated - read 6, accepted 6, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:57,641 | INFO    | pipeline | stores: raw_stores.csv -> SUCCESS in 0.04s
+2026-10-28 21:48:57,675 | INFO    | ingest | customers: loaded raw_customers.csv into raw (batch 2, 930 rows read, 0 malformed)
+2026-10-28 21:48:57,742 | INFO    | validate | customers: batch 2 validated - read 930, accepted 930, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:57,742 | INFO    | pipeline | customers: raw_customers.csv -> SUCCESS in 0.10s
+2026-10-28 21:48:57,749 | INFO    | ingest | products: loaded raw_products.csv into raw (batch 3, 10 rows read, 0 malformed)
+2026-10-28 21:48:57,762 | INFO    | validate | products: batch 3 validated - read 10, accepted 10, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:57,763 | INFO    | pipeline | products: raw_products.csv -> SUCCESS in 0.02s
+2026-10-28 21:48:57,769 | INFO    | ingest | supplies: loaded raw_supplies.csv into raw (batch 4, 65 rows read, 0 malformed)
+2026-10-28 21:48:57,785 | INFO    | validate | supplies: batch 4 validated - read 65, accepted 65, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:48:57,786 | INFO    | pipeline | supplies: raw_supplies.csv -> SUCCESS in 0.02s
+2026-10-28 21:48:57,844 | INFO    | ingest | orders: loaded orders_2016_09.csv into raw (batch 5, 1611 rows read, 0 malformed)
+2026-10-28 21:48:58,418 | INFO    | validate | orders: batch 5 validated - read 1611, accepted 1611, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:48:58,425 | INFO    | pipeline | orders: orders_2016_09.csv -> SUCCESS in 0.64s
+2026-10-28 21:48:58,520 | INFO    | ingest | orders: loaded orders_2016_10.csv into raw (batch 6, 1805 rows read, 0 malformed)
+2026-10-28 21:48:58,987 | INFO    | validate | orders: batch 6 validated - read 1805, accepted 1805, rejected 0, flagged 18 | rules hit: zero_value_order (EXCEPTION): 18
+2026-10-28 21:48:58,990 | INFO    | pipeline | orders: orders_2016_10.csv -> SUCCESS in 0.56s
+2026-10-28 21:48:59,064 | INFO    | ingest | orders: loaded orders_2016_11.csv into raw (batch 7, 2380 rows read, 0 malformed)
+2026-10-28 21:48:59,487 | INFO    | validate | orders: batch 7 validated - read 2380, accepted 2380, rejected 0, flagged 19 | rules hit: zero_value_order (EXCEPTION): 19
+2026-10-28 21:48:59,489 | INFO    | pipeline | orders: orders_2016_11.csv -> SUCCESS in 0.50s
+2026-10-28 21:48:59,587 | INFO    | ingest | orders: loaded orders_2016_12.csv into raw (batch 8, 2996 rows read, 0 malformed)
+2026-10-28 21:49:00,056 | INFO    | validate | orders: batch 8 validated - read 2996, accepted 2996, rejected 0, flagged 14 | rules hit: zero_value_order (EXCEPTION): 14
+2026-10-28 21:49:00,058 | INFO    | pipeline | orders: orders_2016_12.csv -> SUCCESS in 0.56s
+2026-10-28 21:49:00,165 | INFO    | ingest | orders: loaded orders_2017_01.csv into raw (batch 9, 3502 rows read, 0 malformed)
+2026-10-28 21:49:00,740 | INFO    | validate | orders: batch 9 validated - read 3502, accepted 3502, rejected 0, flagged 32 | rules hit: zero_value_order (EXCEPTION): 32
+2026-10-28 21:49:00,740 | INFO    | pipeline | orders: orders_2017_01.csv -> SUCCESS in 0.68s
+2026-10-28 21:49:00,847 | INFO    | ingest | orders: loaded orders_2017_02.csv into raw (batch 10, 3480 rows read, 0 malformed)
+2026-10-28 21:49:01,404 | INFO    | validate | orders: batch 10 validated - read 3480, accepted 3480, rejected 0, flagged 28 | rules hit: zero_value_order (EXCEPTION): 28
+2026-10-28 21:49:01,407 | INFO    | pipeline | orders: orders_2017_02.csv -> SUCCESS in 0.66s
+2026-10-28 21:49:01,464 | INFO    | ingest | items: loaded items_2016_09.csv into raw (batch 11, 2260 rows read, 0 malformed)
+2026-10-28 21:49:01,689 | INFO    | validate | items: batch 11 validated - read 2260, accepted 2260, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:01,692 | INFO    | pipeline | items: items_2016_09.csv -> SUCCESS in 0.28s
+2026-10-28 21:49:01,765 | INFO    | ingest | items: loaded items_2016_10.csv into raw (batch 12, 2601 rows read, 0 malformed)
+2026-10-28 21:49:01,997 | INFO    | validate | items: batch 12 validated - read 2601, accepted 2601, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:01,997 | INFO    | pipeline | items: items_2016_10.csv -> SUCCESS in 0.31s
+2026-10-28 21:49:02,097 | INFO    | ingest | items: loaded items_2016_11.csv into raw (batch 13, 3442 rows read, 0 malformed)
+2026-10-28 21:49:02,448 | INFO    | validate | items: batch 13 validated - read 3442, accepted 3442, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:02,451 | INFO    | pipeline | items: items_2016_11.csv -> SUCCESS in 0.44s
+2026-10-28 21:49:02,578 | INFO    | ingest | items: loaded items_2016_12.csv into raw (batch 14, 4413 rows read, 0 malformed)
+2026-10-28 21:49:02,986 | INFO    | validate | items: batch 14 validated - read 4413, accepted 4413, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:03,077 | INFO    | pipeline | items: items_2016_12.csv -> SUCCESS in 0.62s
+2026-10-28 21:49:03,225 | INFO    | ingest | items: loaded items_2017_01.csv into raw (batch 15, 5094 rows read, 0 malformed)
+2026-10-28 21:49:03,712 | INFO    | validate | items: batch 15 validated - read 5094, accepted 5094, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:03,716 | INFO    | pipeline | items: items_2017_01.csv -> SUCCESS in 0.63s
+2026-10-28 21:49:03,860 | INFO    | ingest | items: loaded items_2017_02.csv into raw (batch 16, 5004 rows read, 0 malformed)
+2026-10-28 21:49:04,443 | INFO    | validate | items: batch 16 validated - read 5004, accepted 5004, rejected 0, flagged 0 | rules hit: none
+2026-10-28 21:49:04,446 | INFO    | pipeline | items: items_2017_02.csv -> SUCCESS in 0.73s
+2026-10-28 21:49:06,848 | INFO    | transform | Analytics rebuilt: dim_stores=6, dim_customers=930, dim_products=10, fct_orders=15774, fct_order_items=22814, monthly_store_revenue=6, customer_summary=338, monthly_product_sales=60
+2026-10-28 21:49:07,047 | INFO    | transform | Layer reconciliation: all checks passed
+2026-10-28 21:49:07,055 | INFO    | pipeline | Transformations finished in 2.61s
+2026-10-28 21:49:07,075 | INFO    | validate | Exported rejected_records.csv, dq_summary.csv and reconciliation.csv to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs
+2026-10-28 21:49:07,273 | INFO    | transform | Exported metric CSVs to C:\Users\Talha\Desktop\Data_Engineer_Assessment\outputs\metrics
+2026-10-28 21:49:07,276 | INFO    | pipeline | Freshness: newest order is 2017-02-28 19:30:00
+2026-10-28 21:49:07,278 | INFO    | pipeline | ===== Run 1 SUCCESS in 10.2s | loaded 16, empty 0, skipped 0, failed 0 =====

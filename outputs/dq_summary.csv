@@ -1,0 +1,2 @@
+table_name,category,rule_name,records
+orders,EXCEPTION,zero_value_order,125
