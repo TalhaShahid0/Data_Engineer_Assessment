@@ -7,19 +7,19 @@ Data    : data/sample (6 months: 16 files, 15,774 orders, 22,814 items)
 Full run from an empty database (python -m src.pipeline.run_pipeline --reset)
 --------------------------------------------------------------------
 step                                   files     rows  seconds  rows/s
-ingest + validate: stores                  1        6     0.04     150
-ingest + validate: customers               1      930     0.10    9300
-ingest + validate: products                1       10     0.02     500
-ingest + validate: supplies                1       65     0.02    3250
-ingest + validate: orders                  6    15774     3.59    4393
-ingest + validate: items                   6    22814     2.92    7813
-ingest + validate: all files              16    39599     6.69    5919
-transformations (facts + metrics)                         2.61
-TOTAL run (incl. exports, connect)                        9.69
+ingest + validate: stores                  1        6     0.06     100
+ingest + validate: customers               1      930     0.12    7750
+ingest + validate: products                1       10     0.01    1000
+ingest + validate: supplies                1       65     0.03    2166
+ingest + validate: orders                  6    15774     4.47    3528
+ingest + validate: items                   6    22814     3.21    7107
+ingest + validate: all files              16    39599     7.90    5012
+transformations (facts + metrics)                         2.55
+TOTAL run (incl. exports, connect)                       10.80
 
 Rerun with no new files (all 16 skipped by checkpoint)
 --------------------------------------------------------------------
-TOTAL run                                                 1.60
+TOTAL run                                                 1.50
 
 Database size after the run
 --------------------------------------------------------------------
@@ -28,12 +28,21 @@ audit                                                           192 kB
 raw                                                            8584 kB
 staging                                                        5640 kB
 
+Volume test (stress test, test database, generated data)
+--------------------------------------------------------------------
+1,000,000-row items file (82 MB) in one batch:
+  ingest + validate + transform    176.9 s  (~5,650 rows/s), all rows loaded
+  Python peak memory for the file  ~530 MB  (~6.4x the file size;
+                                  rows list + in-memory COPY buffer)
+
 Observations (measured)
 --------------------------------------------------------------------
 - COPY into raw is fast; most of the per-file time is the SQL rules in
   data_quality.sql (safe-cast functions run per value, NOT EXISTS lookups).
 - Orders are slower per row than items: more rules, more columns to cast.
 - The checkpoint makes a no-change rerun cost only file hashing + metrics.
+- Memory grows linearly with file size (whole file in memory), so files
+  of hundreds of MB should be split or read in chunks.
 
 Estimates (NOT measured) - see docs/architecture.md, Performance section
 --------------------------------------------------------------------

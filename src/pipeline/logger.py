@@ -1,9 +1,15 @@
-"""Logging to the console and to outputs/logs/pipeline.log."""
+"""Logging to the console and to outputs/logs/pipeline.log.
+
+The log file can be changed with the PIPELINE_LOG_FILE environment variable
+(the tests use this so they do not write into the project's log).
+"""
 import logging
+import os
+from pathlib import Path
 
 from src.pipeline.db import PROJECT_ROOT
 
-LOG_FILE = PROJECT_ROOT / "outputs" / "logs" / "pipeline.log"
+LOG_FILE = Path(os.environ.get("PIPELINE_LOG_FILE", PROJECT_ROOT / "outputs" / "logs" / "pipeline.log"))
 LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 
 

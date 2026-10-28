@@ -37,12 +37,12 @@ flowchart LR
 | Layer | Component | Where |
 |---|---|---|
 | Source and ingestion | Download with retries; per-file header check; `COPY` into raw | `src/ingestion/` |
-| Raw storage | One table per source, every column `TEXT`, plus `batch_id`, `source_file`, `row_num`, `loaded_at`. Nothing is lost on load, so any batch can be re-processed from here. | `raw` schema |
+| Raw storage | One table per source, every expected column as `TEXT`, plus `batch_id`, `source_file`, `row_num`, `loaded_at`. Bad values are stored as received, so any batch can be re-processed from here; rows with the wrong number of fields are kept as JSON in `audit.rejected_records`, and unexpected extra columns are ignored (with a warning). | `raw` schema |
 | Validation | SQL rules write failures to `audit.rejected_records`; clean rows are cast and upserted into staging | `sql/data_quality.sql`, `src/validation/` |
 | Transformation | Dimensions and facts upserted from staging; metrics rebuilt | `sql/transformations.sql`, `src/transformation/` |
 | Target | Star schema + metric tables | `analytics` schema |
-| Orchestration | One CLI; per-file transactions; checkpoint by file hash | `src/pipeline/run_pipeline.py` |
-| Testing | 9 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
+| Orchestration | One CLI; per-file transactions; checkpoint by file hash; scheduled with Windows Task Scheduler or cron (example in the README) | `src/pipeline/run_pipeline.py` |
+| Testing | 17 pytest tests on a hand-checked fixture dataset in a separate database | `tests/` |
 | Logging and monitoring | Log file + console; run and file history in `audit`; reconciliation views; freshness check; exit code 1 on failure | `src/pipeline/logger.py`, `audit` schema |
 
 **Order of work in one run**
@@ -177,11 +177,13 @@ Metric tables (rebuilt every run): `monthly_store_revenue (month, store_id)`,
 | `missing_required` - required field empty | all | INVALID |
 | `invalid_uuid` | stores, customers, orders, items | INVALID |
 | `invalid_timestamp` - must start with an ISO date and parse | stores, orders | INVALID |
-| `invalid_amount` - must be whole cents | products, supplies, orders | INVALID |
+| `invalid_amount` - must be whole cents, plain digits only (PostgreSQL would also accept `0x10`, `1_000`) | products, supplies, orders | INVALID |
+| `amount_out_of_range` - above 9,999,999,999 cents (would overflow `NUMERIC(10,2)`) | products, supplies, orders | INVALID |
+| `invalid_key` - SKU / supply id longer than 50 characters | products, supplies | INVALID |
 | `invalid_tax_rate` - number between 0 and 1 | stores | INVALID |
 | `invalid_boolean` | supplies | INVALID |
 | `negative_amount` | products, supplies, orders | INVALID |
-| `duplicate_key` - same key twice in one file (first kept) | all | INVALID |
+| `duplicate_key` - same key twice in one file (UUIDs compared in normalised form, so `{…}` and upper case match); later copies are rejected | all | INVALID |
 | `unknown_customer`, `unknown_store` | orders | INVESTIGATE |
 | `unknown_order` (may be late), `unknown_product` | items, supplies | INVESTIGATE |
 | `before_store_opened` | orders | INVESTIGATE |
@@ -189,9 +191,12 @@ Metric tables (rebuilt every run): `monthly_store_revenue (month, store_id)`,
 | `total_rounding` - differs by exactly 1 cent | orders | EXCEPTION |
 | `zero_value_order` | orders | EXCEPTION |
 
-File-level checks in `ingest.py`: a **missing required column** fails the
-whole file (nothing loaded, logged as `FAILED`); an **extra column** is logged
-as a warning and ignored; an **empty file** is logged as `EMPTY`.
+File-level checks in `ingest.py`: a **missing or duplicated column**, a file
+that **cannot be opened**, or text that is **not valid UTF-8** (or contains NUL
+bytes) fails the whole file (nothing loaded, logged as `FAILED` with the
+error); an **extra column** is logged as a warning and ignored; an **empty
+file** is logged as `EMPTY`; **blank lines** are ignored. "Empty" values
+include whitespace-only values (spaces, tabs).
 
 Each rejected record stores the batch, file row number, rule, a readable
 reason (including the bad value) and the original row as JSON, so it can be
@@ -199,7 +204,7 @@ investigated without opening the file.
 
 ### Reconciliation
 
-* `audit.batch_reconciliation` - per file: `rows_read = rows_accepted + rows_rejected`, and every source row is in raw or recorded as malformed.
+* `audit.batch_reconciliation` - per file: `rows_read = rows_accepted + rows_rejected` (accepted rows are counted independently from raw, so this is a real check), and every source row is in raw or recorded as malformed.
 * `audit.layer_reconciliation` - 8 checks from staging to facts to metrics: counts, revenue totals, units, and **order subtotal = sum of item prices**.
 
 Both are exported to `outputs/` on every run; any failed layer check marks the run `FAILED`.
@@ -237,15 +242,19 @@ the pipeline uses two alternatives:
 2. **Record-level: business-key upserts.** Every load into staging and
    analytics is `INSERT ... ON CONFLICT (key) DO UPDATE ... WHERE ... IS DISTINCT FROM ...`.
    The same record twice gives one row; a corrected record replaces the old
-   one; an unchanged record is not even rewritten.
+   one; an unchanged record is not even rewritten. Each staging row remembers
+   the batch it came from, and an upsert only applies when
+   `existing.batch_id <= new.batch_id`, so re-processing an **older** batch
+   (e.g. the re-check of held rows) can never overwrite newer data.
 
 | Question | Answer |
 |---|---|
-| How is processed data identified? | File hash with status `SUCCESS` in `audit.ingestion_log`. |
+| How is processed data identified? | File hash with status `SUCCESS` (or `EMPTY`) in `audit.ingestion_log`. |
 | How are duplicates prevented? | Checkpoint (same file) + primary keys and upserts (same record in different files) + `duplicate_key` rule (same record within a file). |
-| How are corrections applied? | A later file containing the same key overwrites the row (latest file wins); metrics are rebuilt every run. |
+| How are corrections applied? | A later file containing the same key overwrites the row (the most recently loaded batch wins; an older batch never overwrites a newer one); metrics are rebuilt every run. |
 | Checkpoint / state? | `audit.ingestion_log` (per file) and `audit.pipeline_runs` (per run). |
-| How are failures detected? | Any error in a file rolls back that file's transaction and records `FAILED` with the error message; the run is marked `FAILED` and the process exits with code 1. |
+| How are failures detected? | Any error in a file rolls back that file's transaction and records `FAILED` with the error message; the run is marked `FAILED` and the process exits with code 1. The run result is written in a `finally` block on a fresh connection, so a lost connection or Ctrl+C is still recorded as `FAILED`. |
+| Two runs at once? | Prevented: each run takes a PostgreSQL advisory lock; a second run is refused and exits 1. |
 | How are failures recovered? | Run the same command again. The failed file never reached `SUCCESS`, so it is retried; files that succeeded are skipped. |
 | Late-arriving records? | A child whose parent has not arrived (e.g. an item before its order) is held as `INVESTIGATE`. Every run re-checks held batches and loads the rows whose parent now exists. Demonstrated: a failed orders file left 3,442 items held; the next run loaded the orders and then the items. |
 
@@ -258,37 +267,31 @@ they are idempotent, so if they fail the next run simply runs them again.
 
 ## 7. Testing
 
-`tests/test_pipeline.py` - 9 tests, each running the real pipeline on a small
-dataset whose metrics were calculated by hand:
+`tests/test_pipeline.py` - 17 tests, each running the real pipeline on a small
+dataset whose metrics were calculated by hand, in a separate `jaffle_test`
+database. They cover schema compliance (including a **deliberately invalid
+input**), invalid-record handling and categories, business-key uniqueness and
+corrections, referential integrity, record-count and aggregate
+reconciliation, transformation correctness, idempotency, failure recovery,
+empty and blank input, and run-level safety (concurrent and interrupted
+runs). The full list is in the [README](../README.md#5-tests).
 
-| Test | Area |
-|---|---|
-| file missing a required column is rejected | schema compliance, **deliberately invalid input** |
-| invalid rows rejected with rule and category | expected behaviour for invalid records |
-| corrected record updates instead of duplicating | business-key uniqueness, corrections |
-| no orphan records reach the facts | referential integrity |
-| reconciliation balances with rejected rows | record-count and aggregate reconciliation |
-| metrics match hand-calculated values | transformation correctness |
-| rerun skips loaded files and changes nothing | idempotency |
-| failed file is rolled back and recovered | failure detection and recovery |
-| empty file is logged and does not fail the run | empty input |
-
-Results: `outputs/test_results.txt` (9 passed).
+Results: `outputs/test_results.txt` (17 passed).
 
 ---
 
 ## 8. Performance, observability and reliability
 
 Measured numbers are in `outputs/benchmark.txt`: a full run of the
-6-month sample (39,599 rows) takes **~10 s** on a laptop, and a rerun with
-no new files **~1.6 s**. Everything below marked *proposal* is not
+6-month sample (39,599 rows) takes **~11 s** on a laptop, and a rerun with
+no new files **~1.5 s**. Everything below marked *proposal* is not
 implemented.
 
 | Topic | Current solution | At larger scale (*proposal*) |
 |---|---|---|
-| **Memory and partitioning** | Files are streamed to PostgreSQL with `COPY`; Python never holds more than one file. Data is already split into monthly batches. | Read files in chunks; range-partition `raw` and the fact tables by month so old partitions are untouched and can be archived. |
+| **Memory and partitioning** | One file is processed at a time; it is read fully into memory and sent to PostgreSQL with one `COPY`, so peak memory is about 6x the file size (measured once with a generated 82 MB, 1M-row file: ~530 MB; see `outputs/benchmark.txt`). Data is already split into monthly batches, which keeps files small. | Read files in chunks; range-partition `raw` and the fact tables by month so old partitions are untouched and can be archived. |
 | **SQL optimisation and indexing** | Primary keys on every business key; indexes on fact foreign keys and `order_date`; `(batch_id, row_num)` key on raw so each batch is read by index; unchanged rows skipped by `IS DISTINCT FROM`. | Check heavy queries with `EXPLAIN ANALYZE`; replace per-row PL/pgSQL safe casts (the main cost in validation) with set-based regex checks; rebuild only the affected months of metrics instead of all. |
-| **Batch or distributed processing** | Single-node batch is enough: the measured rate is ~6,000 rows/s for validation and the full public dataset is only ~4x the sample. | Spark or a cloud warehouse would only be justified at hundreds of millions of rows; the same layered design and SQL would carry over. |
+| **Batch or distributed processing** | Single-node batch is enough: the measured rate is ~5,000 rows/s for validation (a generated 1M-row file loaded in ~3 minutes, measured once) and the full public dataset is only ~4x the sample. | Spark or a cloud warehouse would only be justified at hundreds of millions of rows; the same layered design and SQL would carry over. |
 | **Retry and controlled failure** | Downloads retry 3 times with backoff (2 s, 4 s). Data errors are never retried blindly: bad rows are rejected with a reason, bad files fail alone and are retried on the next run. | Scheduler-level retry of the whole run with a limit, then alert. |
 | **Structured logging and monitoring** | Every step logs timestamp, level, component, file, batch id, counts and duration to `outputs/logs/pipeline.log` and the console. Full history is queryable in `audit.pipeline_runs`, `audit.ingestion_log` and `audit.rejected_records`. | JSON log lines shipped to a log platform; a dashboard on the audit tables (rejection rate per rule, run duration). |
 | **Freshness and completion** | Run status (`SUCCESS`/`FAILED`) with file counts; reconciliation must pass; freshness check logs the newest order and warns when it is older than `monitoring.freshness_max_age_days` (disabled for this historical sample). | Expected-files check per day (e.g. alert if no orders file arrived). |

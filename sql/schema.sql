@@ -3,7 +3,8 @@
 --
 -- Layers:
 --   audit     : pipeline runs, per-file ingestion log, rejected records
---   raw       : exact copy of every source file (all TEXT, append-only)
+--   raw       : every source row as received (all TEXT, append-only);
+--               rows with the wrong number of fields go to audit.rejected_records
 --   staging   : typed, cleaned, de-duplicated records (one row per key)
 --   analytics : star schema (dimensions + facts) and metric tables
 --
@@ -28,7 +29,7 @@ CREATE SCHEMA analytics;
 -- =====================================================================
 
 CREATE FUNCTION staging.is_blank(v TEXT) RETURNS BOOLEAN
-LANGUAGE sql IMMUTABLE AS $$ SELECT COALESCE(TRIM(v), '') = '' $$;
+LANGUAGE sql IMMUTABLE AS $$ SELECT COALESCE(btrim(v, E' \t\r\n'), '') = '' $$;
 
 CREATE FUNCTION staging.try_uuid(v TEXT) RETURNS UUID
 LANGUAGE plpgsql IMMUTABLE AS $$
@@ -38,10 +39,14 @@ EXCEPTION WHEN others THEN
     RETURN NULL;
 END $$;
 
--- Whole numbers only (source amounts are integer cents).
+-- Whole numbers only (source amounts are integer cents). Plain digits are
+-- required because PostgreSQL also parses forms like '0x10' and '1_000'.
 CREATE FUNCTION staging.try_bigint(v TEXT) RETURNS BIGINT
 LANGUAGE plpgsql IMMUTABLE AS $$
 BEGIN
+    IF v !~ '^\s*-?\d+\s*$' THEN
+        RETURN NULL;
+    END IF;
     RETURN TRIM(v)::BIGINT;
 EXCEPTION WHEN others THEN
     RETURN NULL;
@@ -112,7 +117,7 @@ CREATE TABLE audit.rejected_records (
     reject_id       BIGSERIAL PRIMARY KEY,
     batch_id        INT  NOT NULL REFERENCES audit.ingestion_log (batch_id),
     table_name      TEXT NOT NULL,
-    row_num         INT  NOT NULL,              -- line in the source file (1 = first data row)
+    row_num         INT  NOT NULL,              -- data record number in the file (1 = first, blank lines not counted)
     record          JSONB NOT NULL,             -- the raw row, for investigation
     rule_name       TEXT NOT NULL,
     reason          TEXT NOT NULL,
@@ -121,7 +126,7 @@ CREATE TABLE audit.rejected_records (
     rejected_at     TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_rejected_records_batch ON audit.rejected_records (batch_id);
+CREATE INDEX ix_rejected_records_batch_row ON audit.rejected_records (batch_id, row_num);
 
 
 -- =====================================================================

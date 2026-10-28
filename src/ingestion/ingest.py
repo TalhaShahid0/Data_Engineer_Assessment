@@ -1,13 +1,14 @@
 """Load one source CSV file into its raw.* table.
 
-Steps for one file:
-  1. Hash the file (SHA-256) - used as the checkpoint to skip files already loaded.
+Steps for one file (the caller has already hashed it for the checkpoint):
+  1. Read the rows; blank lines are ignored.
   2. Check the header against the expected schema in config/config.yaml:
-       - missing required column -> SchemaError (file FAILED, nothing loaded)
+       - missing required column or duplicate column -> SchemaError (file FAILED)
        - unexpected extra column -> warning, column ignored
        - empty file / header only -> status EMPTY
   3. Create the batch in audit.ingestion_log (status RUNNING).
-  4. COPY every well-formed row into raw.<table> with batch_id, source_file, row_num.
+  4. COPY every well-formed row into raw.<table> with batch_id, source_file, row_num
+     (row_num = position of the data record in the file, blank lines not counted).
      Rows with the wrong number of fields are written to audit.rejected_records
      (rule malformed_row) instead.
 
@@ -25,6 +26,10 @@ from src.pipeline.logger import get_logger
 
 log = get_logger("ingest")
 
+# Allow long fields (the default limit is 128 KB). Over-long keys are then
+# rejected row by row by the SQL rules instead of failing the whole file.
+csv.field_size_limit(2**31 - 1)
+
 
 class SchemaError(Exception):
     """The file does not match the expected schema."""
@@ -39,10 +44,10 @@ def file_sha256(path):
 
 
 def already_loaded(conn, file_hash):
-    """True if a file with exactly this content was already loaded successfully."""
+    """True if a file with exactly this content was already processed (loaded or empty)."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT 1 FROM audit.ingestion_log WHERE file_hash = %s AND status = 'SUCCESS'",
+            "SELECT 1 FROM audit.ingestion_log WHERE file_hash = %s AND status IN ('SUCCESS', 'EMPTY')",
             (file_hash,),
         )
         return cur.fetchone() is not None
@@ -54,19 +59,23 @@ def log_batch(conn, run_id, table_name, file_name, file_hash, status, error_mess
         cur.execute(
             """
             INSERT INTO audit.ingestion_log
-                (run_id, table_name, file_name, file_hash, status, error_message,
-                 finished_at)
-            VALUES (%s, %s, %s, %s, %s, %s,
-                    CASE WHEN %s = 'RUNNING' THEN NULL ELSE clock_timestamp() END)
+                (run_id, table_name, file_name, file_hash, status, error_message, finished_at)
+            VALUES (%(run_id)s, %(table)s, %(file)s, %(hash)s, %(status)s, %(error)s,
+                    CASE WHEN %(status)s = 'RUNNING' THEN NULL ELSE clock_timestamp() END)
             RETURNING batch_id
             """,
-            (run_id, table_name, file_name, file_hash, status, error_message, status),
+            {"run_id": run_id, "table": table_name, "file": file_name, "hash": file_hash,
+             "status": status, "error": error_message},
         )
         return cur.fetchone()[0]
 
 
 def check_header(header, table):
     """Validate the file header; return the expected columns present in the file."""
+    duplicated = sorted({col for col in header if header.count(col) > 1})
+    if duplicated:
+        raise SchemaError(f"{table['name']}: duplicate column(s) {duplicated} in header {header}")
+
     missing = [col for col in table["required"] if col not in header]
     if missing:
         raise SchemaError(f"{table['name']}: missing required column(s) {missing}; found {header}")
@@ -78,14 +87,13 @@ def check_header(header, table):
     return [col for col in table["columns"] if col in header]
 
 
-def ingest_file(conn, run_id, table, path):
+def ingest_file(conn, run_id, table, path, file_hash):
     """Load one file into raw.<table>. Returns a dict with batch_id, status, rows_read."""
-    file_hash = file_sha256(path)
-
     with open(path, newline="", encoding="utf-8-sig") as f:
-        reader = csv.reader(f)
-        header = [col.strip().lower() for col in next(reader, [])]
-        rows = list(reader)
+        records = [row for row in csv.reader(f) if any(field.strip() for field in row)]
+
+    header = [col.strip().lower() for col in records[0]] if records else []
+    rows = records[1:]
 
     if not header or not rows:
         batch_id = log_batch(conn, run_id, table["name"], path.name, file_hash, "EMPTY",

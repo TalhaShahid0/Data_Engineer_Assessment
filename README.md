@@ -105,15 +105,29 @@ python -m src.pipeline.run_pipeline             # later runs: only new or failed
 | Option | Effect |
 |---|---|
 | `--reset` | Drop and recreate all schemas (`sql/schema.sql`) before running |
-| `--data-dir PATH` | Read input files from another folder (default `data/sample`) |
 | `--simulate-failure FILE` | Fail on purpose while processing that file (recovery demo) |
 
 The process exits with code **0** on success and **1** on failure, so a
-scheduler (Windows Task Scheduler, cron, Airflow) can alert on it.
+scheduler can alert on it. Only one run can be active at a time (a PostgreSQL
+advisory lock); a second run is refused.
 
-A full run of the sample takes about **10 seconds**; a rerun with nothing new about **1.6 seconds**.
+**Scheduling** - for example a daily run at 02:00 with Windows Task Scheduler
+(adjust the path to the project folder):
 
-### Outputs (regenerated on every run)
+```powershell
+schtasks /create /tn "JaffleShopPipeline" /sc daily /st 02:00 /tr "cmd /c cd /d C:\path\to\Data_Engineer_Assessment && venv\Scripts\python.exe -m src.pipeline.run_pipeline"
+```
+
+or with cron on Linux/macOS: `0 2 * * * cd /path/to/Data_Engineer_Assessment && venv/bin/python -m src.pipeline.run_pipeline`.
+`PGPASSWORD` must be set for the account the task runs as.
+
+A full run of the sample takes about **11 seconds**; a rerun with nothing new about **1.5 seconds**.
+
+### Outputs
+
+The pipeline rewrites the metric, data-quality and reconciliation CSVs on every
+run and appends to the log. `test_results.txt`, `benchmark.txt` and the demo
+file are evidence files produced once for this submission (sections 5 and 6).
 
 | File | Content |
 |---|---|
@@ -143,8 +157,9 @@ python -m pytest -v
 ```
 
 The tests create and use a separate database, `jaffle_test`, so the main
-database is not touched. 9 tests run the real pipeline on a small dataset
-(`tests/fixtures/good/`) whose metrics were calculated by hand:
+database (and the project log) are not touched. 17 tests run the real
+pipeline on a small dataset (`tests/fixtures/good/`) whose metrics were
+calculated by hand:
 
 | Test | Checks |
 |---|---|
@@ -156,9 +171,17 @@ database is not touched. 9 tests run the real pipeline on a small dataset
 | `test_metrics_match_hand_calculated_values` | Transformation correctness for all 3 metrics |
 | `test_rerun_skips_loaded_files_and_changes_nothing` | Idempotency: second run skips everything, tables identical |
 | `test_failed_file_is_rolled_back_and_recovered_on_next_run` | Failure is rolled back; next run retries and completes |
-| `test_empty_file_is_logged_and_does_not_fail_the_run` | Empty input handling |
+| `test_empty_file_is_logged_and_does_not_fail_the_run` | Empty input handling; the empty file is not re-processed |
+| `test_correction_is_not_undone_by_recheck_of_older_batch` | Re-checking an older batch never overwrites a newer correction |
+| `test_same_uuid_in_different_spelling_is_a_duplicate` | `{uuid}` / `UUID` spellings of one key are rejected as duplicates |
+| `test_out_of_range_values_are_rejected_without_failing_the_file` | Amounts that would overflow, `0x10`-style numbers and over-long keys are rejected row by row |
+| `test_blank_lines_are_ignored` | Blank lines before or after the data do not lose or reject rows |
+| `test_duplicate_header_column_fails_the_file` | Unexpected schema: the same column twice fails the file |
+| `test_unreadable_file_fails_only_that_file` | A file that cannot be opened fails alone; the other files load |
+| `test_second_run_is_refused_while_one_is_in_progress` | Only one run at a time |
+| `test_interrupted_run_is_recorded_as_failed` | Ctrl+C mid-run is recorded as FAILED |
 
-Latest result: **9 passed** (`outputs/test_results.txt`).
+Latest result: **17 passed** (`outputs/test_results.txt`).
 
 ---
 
@@ -192,10 +215,10 @@ python -m src.pipeline.run_pipeline --reset        # back to the clean state
 | What fails | What happens | What to do |
 |---|---|---|
 | Download | Retried 3 times (2 s, 4 s backoff), then a clear error | Check the network / source URL and rerun `download_data` |
-| A file has a missing column or cannot be read | That file is rolled back and logged `FAILED`; other files continue; run exits 1 | Fix or replace the file, rerun the pipeline: only that file is processed |
+| A file has a missing or duplicate column, cannot be opened, or is not valid UTF-8 text | That file is rolled back and logged `FAILED` with the error; other files continue; run exits 1 | Fix or replace the file, rerun the pipeline: only that file is processed |
 | Bad rows inside a file | Rows rejected with a reason (`INVALID` / `INVESTIGATE`); the rest of the file loads | Review `outputs/rejected_records.csv`; send a corrected file - its rows upsert over the old ones |
 | A row's parent has not arrived yet | Row held as `INVESTIGATE` | Nothing: it loads automatically on the first run after the parent arrives |
-| Database unavailable / crash mid-run | The current file's transaction is rolled back, nothing half-loaded | Rerun the same command |
+| Database unavailable / crash / Ctrl+C mid-run | The current file's transaction is rolled back, nothing half-loaded; the run is recorded as `FAILED` (on a fresh connection when possible) | Rerun the same command |
 | Reconciliation check fails | Run marked `FAILED`, check logged as ERROR | Inspect `outputs/layer_reconciliation.csv` |
 
 ### Investigating a problem
@@ -223,16 +246,27 @@ SELECT * FROM analytics.fct_orders  WHERE order_id = '<order id>';
 * Only 6 months of the public data are used (enough to show every behaviour; the full dataset is ~4x larger, estimated ~40 s per full run - see `outputs/benchmark.txt`).
 * Dimensions are SCD Type 1 (latest value only); history would need SCD Type 2 (design in the architecture doc).
 * Records deleted from the source are not detected (the source has no delete information).
-* A file with the same name but new content is treated as a new batch; its records upsert over earlier versions (latest file wins).
+* A file with the same name but new content is treated as a new batch; its records upsert over earlier versions (the most recently loaded file wins; an older batch never overwrites a newer one).
 * Batches with `INVESTIGATE` rows are re-checked on every run; with many permanently-invalid rows this should get an age limit.
+* An item held for an unknown product leaves its order's subtotal unmatched, so the reconciliation keeps the run `FAILED` until the item is resolved (intended: the data is incomplete).
+* Each file is read fully into memory before `COPY`: peak memory is about 6x the file size (measured once with a generated 1M-row, 82 MB file: ~530 MB). Fine for monthly files of a few MB; very large files should be read in chunks.
+* A file containing NUL bytes or non-UTF-8 text fails as a whole (with a clear error) rather than row by row.
+* Timestamps with a time-zone offset (e.g. `+05:00`) are accepted and the offset is dropped (the source has no time zones).
 * Metrics are fully rebuilt each run (fine at this size; see future improvements).
 * Freshness alerting is disabled because the sample is historical data.
 
 ### Future improvements
 
-* Schedule with Task Scheduler / cron, or an Airflow DAG with one task per stage, with alerts on failed runs, rejection-rate thresholds and stale data.
+* Move scheduling to an orchestrator (e.g. an Airflow DAG with one task per stage) with alerts on failed runs, rejection-rate thresholds and stale data.
 * Rebuild only the months affected by a batch instead of all metrics.
 * Partition `raw` and fact tables by month; archive old raw partitions.
 * Replace per-row PL/pgSQL safe casts with set-based checks for higher throughput.
 * SCD Type 2 for products if price history becomes available.
 * Run tests automatically on every push (GitHub Actions with a PostgreSQL service).
+
+---
+
+## 8. Tools and assistance
+
+Built with the help of an AI coding assistant (Claude Code). All design
+decisions, code and results were reviewed by the author.

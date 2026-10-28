@@ -5,14 +5,19 @@ small hand-checked dataset in tests/fixtures/good. Every test starts from an
 empty schema (reset=True), so tests are independent of each other.
 """
 import copy
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Keep test runs out of the project's log file (must be set before src is imported).
+os.environ["PIPELINE_LOG_FILE"] = str(Path(tempfile.gettempdir()) / "jaffle_test_pipeline.log")
 
 from src.pipeline.db import get_connection, load_config  # noqa: E402
 from src.pipeline.run_pipeline import run_pipeline  # noqa: E402

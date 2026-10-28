@@ -9,6 +9,8 @@ against the jaffle_test database, using the small dataset in tests/fixtures/good
 """
 from decimal import Decimal
 
+import pytest
+
 from conftest import query, scalar
 
 STORE = "aaaaaaaa-0000-0000-0000-000000000001"
@@ -220,7 +222,7 @@ def test_failed_file_is_rolled_back_and_recovered_on_next_run(run, data_dir, db)
     assert first["status"] == "FAILED"
     assert scalar(db, "SELECT count(*) FROM raw.orders WHERE source_file = 'orders_2017_02.csv'") == 0
     assert scalar(db, "SELECT count(*) FROM analytics.fct_orders") == 2
-    assert scalar(db, "SELECT rule_name FROM audit.rejected_records") == "unknown_order"
+    assert query(db, "SELECT table_name, rule_name FROM audit.rejected_records") == [("items", "unknown_order")]
 
     second = run(data_dir)
 
@@ -244,3 +246,141 @@ def test_empty_file_is_logged_and_does_not_fail_the_run(run, data_dir, db):
     assert result["status"] == "SUCCESS"
     assert scalar(db, "SELECT status FROM audit.ingestion_log WHERE file_name = 'orders_2017_03.csv'") == "EMPTY"
     assert scalar(db, "SELECT count(*) FROM analytics.fct_orders") == 3
+    assert run(data_dir)["files"]["SKIPPED"] == 9        # the empty file is not re-processed
+
+
+# ---------------------------------------------------------------------------
+# Regression tests (found by code review and stress testing)
+# ---------------------------------------------------------------------------
+def order_row(order_id, ordered_at="2017-03-01T10:00:00", subtotal="600", tax="36", total="636",
+              customer=ALICE):
+    return f"{order_id},{customer},{ordered_at},{STORE},{subtotal},{tax},{total}\n"
+
+
+def test_correction_is_not_undone_by_recheck_of_older_batch(run, data_dir, db):
+    """A batch with a held row is re-checked on every run; that re-check must not
+    overwrite a newer correction of another row from the same batch."""
+    (data_dir / "orders_2017_03.csv").write_text(
+        ORDER_HEADER
+        + order_row("dddddddd-0000-0000-0000-000000000070")
+        + order_row("dddddddd-0000-0000-0000-000000000071",
+                    customer="cccccccc-0000-0000-0000-000000000099")       # held: unknown customer
+    )
+    run(data_dir, reset=True)
+    (data_dir / "orders_2017_04.csv").write_text(                          # correction of order 70
+        ORDER_HEADER + order_row("dddddddd-0000-0000-0000-000000000070", ordered_at="2017-03-09T09:09:00")
+    )
+    run(data_dir)
+    run(data_dir)                                                          # re-check again, nothing new
+
+    assert str(scalar(db, "SELECT ordered_at FROM analytics.fct_orders "
+                          "WHERE order_id = 'dddddddd-0000-0000-0000-000000000070'")) == "2017-03-09 09:09:00"
+
+
+def test_same_uuid_in_different_spelling_is_a_duplicate(run, data_dir, db):
+    """'{uuid}' and 'UUID' are the same key: rejected as a duplicate, not a crash."""
+    key = "dddddddd-0000-0000-0000-000000000080"
+    (data_dir / "orders_2017_03.csv").write_text(
+        ORDER_HEADER + order_row(key) + order_row("{" + key + "}") + order_row(key.upper())
+    )
+
+    result = run(data_dir, reset=True)
+
+    assert result["status"] == "SUCCESS"
+    assert query(db, "SELECT row_num, rule_name FROM audit.rejected_records ORDER BY row_num") == [
+        (2, "duplicate_key"), (3, "duplicate_key")]
+    assert scalar(db, f"SELECT count(*) FROM analytics.fct_orders WHERE order_id = '{key}'") == 1
+
+
+def test_out_of_range_values_are_rejected_without_failing_the_file(run, data_dir, db):
+    """Values that would overflow a column are rejected row by row; the file still loads."""
+    (data_dir / "orders_2017_03.csv").write_text(
+        ORDER_HEADER
+        + order_row("dddddddd-0000-0000-0000-000000000090", subtotal="10000000000", tax="0",
+                    total="10000000000")                                              # too large for NUMERIC(10,2)
+        + order_row("dddddddd-0000-0000-0000-000000000091", subtotal="9000000000000000000",
+                    tax="9000000000000000000", total="1")                             # would overflow BIGINT
+        + order_row("dddddddd-0000-0000-0000-000000000092", subtotal="0x10", tax="0", total="16")
+        + order_row("dddddddd-0000-0000-0000-000000000093")                           # valid
+    )
+    (data_dir / "raw_products.csv").write_text(
+        (data_dir / "raw_products.csv").read_text() + f"{'X' * 60},long sku,jaffle,100,d\n"
+    )
+
+    result = run(data_dir, reset=True)
+
+    assert result["files"]["FAILED"] == 0
+    assert {(table, row_num, rule) for table, row_num, rule in query(
+        db, "SELECT table_name, row_num, rule_name FROM audit.rejected_records "
+            "WHERE category = 'INVALID'")} == {
+        ("orders", 1, "amount_out_of_range"),
+        ("orders", 2, "amount_out_of_range"),
+        ("orders", 3, "invalid_amount"),
+        ("products", 3, "invalid_key"),
+    }
+    assert scalar(db, "SELECT count(*) FROM staging.orders "
+                      "WHERE order_id = 'dddddddd-0000-0000-0000-000000000093'") == 1
+
+
+def test_blank_lines_are_ignored(run, data_dir, db):
+    """Blank lines before the header or after the data do not lose or reject rows."""
+    (data_dir / "orders_2017_03.csv").write_text(
+        "\n\n" + ORDER_HEADER + order_row("dddddddd-0000-0000-0000-000000000100") + "\n\n"
+    )
+
+    run(data_dir, reset=True)
+
+    assert query(db, "SELECT status, rows_read, rows_accepted, rows_rejected FROM audit.ingestion_log "
+                     "WHERE file_name = 'orders_2017_03.csv'") == [("SUCCESS", 1, 1, 0)]
+
+
+def test_duplicate_header_column_fails_the_file(run, data_dir, db):
+    (data_dir / "orders_2017_03.csv").write_text(
+        ORDER_HEADER.strip() + ",id\n" + order_row("dddddddd-0000-0000-0000-000000000101").strip() + ",x\n"
+    )
+
+    run(data_dir, reset=True)
+
+    status, error = query(db, "SELECT status, error_message FROM audit.ingestion_log "
+                              "WHERE file_name = 'orders_2017_03.csv'")[0]
+    assert status == "FAILED" and "duplicate column" in error
+
+
+def test_unreadable_file_fails_only_that_file(run, data_dir, db):
+    """A file that cannot be opened is logged as FAILED; the other files still load."""
+    (data_dir / "orders_2017_03.csv").mkdir()          # matches the pattern but cannot be read
+
+    result = run(data_dir, reset=True)
+
+    assert result["files"] == {"SUCCESS": 8, "SKIPPED": 0, "FAILED": 1, "EMPTY": 0}
+    assert scalar(db, "SELECT status FROM audit.ingestion_log WHERE file_name = 'orders_2017_03.csv'") == "FAILED"
+    assert scalar(db, "SELECT count(*) FROM analytics.fct_orders") == 3
+
+
+def test_second_run_is_refused_while_one_is_in_progress(run, data_dir, db):
+    """Two runs at the same time are not allowed (advisory lock)."""
+    run(data_dir, reset=True)
+    scalar(db, "SELECT pg_advisory_lock(hashtext('jaffle_pipeline'))")   # pretend a run is active
+    try:
+        result = run(data_dir)
+    finally:
+        scalar(db, "SELECT pg_advisory_unlock(hashtext('jaffle_pipeline'))")
+
+    assert result["status"] == "FAILED" and result["run_id"] is None
+    assert scalar(db, "SELECT count(*) FROM audit.pipeline_runs") == 1    # nothing was started
+
+
+def test_interrupted_run_is_recorded_as_failed(run, data_dir, db, monkeypatch):
+    """Ctrl+C in the middle of a run: the run is recorded as FAILED and the lock is released."""
+    import src.pipeline.run_pipeline as pipeline
+
+    def interrupt(conn):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(pipeline, "run_transformations", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        run(data_dir, reset=True)
+    monkeypatch.undo()
+
+    assert query(db, "SELECT status, error_message FROM audit.pipeline_runs") == [("FAILED", "run interrupted")]
+    assert run(data_dir)["status"] == "SUCCESS"                          # lock was released

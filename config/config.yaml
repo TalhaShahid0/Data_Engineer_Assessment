@@ -8,10 +8,8 @@ database:
   user: postgres
 
 paths:
-  sample_data: data/sample
-  sql: sql
-  outputs: outputs
-  logs: outputs/logs
+  sample_data: data/sample   # input files
+  outputs: outputs           # CSV reports (the log file is outputs/logs/pipeline.log)
 
 monitoring:
   # Warn when the newest order is older than this many days.
@@ -19,14 +17,13 @@ monitoring:
   # in production this would be e.g. 1 (data must be at most a day old).
   freshness_max_age_days: null
 
-source:
-  name: Jaffle Shop sample data (dbt Labs)
+source:                      # Jaffle Shop sample data (dbt Labs)
   base_url: https://raw.githubusercontent.com/dbt-labs/jaffle-shop-data/main/jaffle-data
   months_to_keep: 6          # representative subset: first N months of orders/items
 
 # Source tables in load order (parents before children).
 # file_pattern: which files in data/sample belong to the table
-# columns:      expected header, in order
+# columns:      expected header columns (any order)
 # required:     columns that must be present in the file header
 tables:
   - name: stores

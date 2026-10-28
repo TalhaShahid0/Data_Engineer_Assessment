@@ -66,13 +66,14 @@ def main():
 
     # 2. Orders: keep the first N months, one file per month.
     order_header, orders = read_rows(fetch_csv(f"{base_url}/raw_orders.csv"))
+    order_id_col = order_header.index("id")
     ordered_at = order_header.index("ordered_at")
     months = sorted({row[ordered_at][:7] for row in orders})[:months_to_keep]
 
     order_month = {}  # order id -> "YYYY-MM", used to split items
     for month in months:
         month_rows = [row for row in orders if row[ordered_at][:7] == month]
-        order_month.update({row[0]: month for row in month_rows})
+        order_month.update({row[order_id_col]: month for row in month_rows})
         file_name = f"orders_{month.replace('-', '_')}.csv"
         write_csv(out_dir / file_name, order_header, month_rows)
         log.info("Saved %s (%s rows)", file_name, len(month_rows))

@@ -14,7 +14,7 @@
 --                and upserted (ON CONFLICT) so reprocessing never duplicates.
 --                Unchanged rows are left untouched (IS DISTINCT FROM).
 --
--- Cleaning applied: TRIM, repeated spaces collapsed in names, ids lower-case
+-- Cleaning applied: whitespace (incl. tabs) collapsed and trimmed in names, ids lower-case
 -- UUIDs, SKUs upper-case, product types lower-case, cents converted to dollars.
 --
 -- Note: this file is run with parameters, so a literal percent sign would
@@ -33,7 +33,7 @@ WHERE batch_id = %(batch_id)s AND rule_name <> 'malformed_row';
 WITH r AS (
     SELECT s.*,
            to_jsonb(s) - ARRAY['batch_id', 'source_file', 'row_num', 'loaded_at'] AS record,
-           row_number() OVER (PARTITION BY lower(trim(s.id)) ORDER BY s.row_num) AS dup_rank
+           row_number() OVER (PARTITION BY COALESCE(staging.try_uuid(s.id)::TEXT, lower(trim(s.id))) ORDER BY s.row_num) AS dup_rank
     FROM raw.stores s
     WHERE s.batch_id = %(batch_id)s
 )
@@ -51,14 +51,14 @@ CROSS JOIN LATERAL (VALUES
     ('invalid_tax_rate', 'tax_rate must be a number between 0 and 1: ' || r.tax_rate, 'INVALID',
         NOT staging.is_blank(r.tax_rate)
         AND COALESCE(staging.try_numeric(r.tax_rate) NOT BETWEEN 0 AND 0.9999, TRUE)),
-    ('duplicate_key', 'id appears more than once in the file (first kept)', 'INVALID',
+    ('duplicate_key', 'id appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.id))
 ) AS c(rule_name, reason, category, failed)
 WHERE c.failed;
 
 INSERT INTO staging.stores (store_id, store_name, opened_at, tax_rate, batch_id)
 SELECT staging.try_uuid(s.id),
-       regexp_replace(trim(s.name), '\s+', ' ', 'g'),
+       btrim(regexp_replace(s.name, '\s+', ' ', 'g')),
        staging.try_timestamp(s.opened_at),
        staging.try_numeric(s.tax_rate),
        s.batch_id
@@ -73,7 +73,8 @@ SET store_name = EXCLUDED.store_name,
     tax_rate   = EXCLUDED.tax_rate,
     batch_id   = EXCLUDED.batch_id,
     updated_at = now()
-WHERE (staging.stores.store_name, staging.stores.opened_at, staging.stores.tax_rate)
+WHERE staging.stores.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND (staging.stores.store_name, staging.stores.opened_at, staging.stores.tax_rate)
       IS DISTINCT FROM (EXCLUDED.store_name, EXCLUDED.opened_at, EXCLUDED.tax_rate);
 
 
@@ -83,7 +84,7 @@ WHERE (staging.stores.store_name, staging.stores.opened_at, staging.stores.tax_r
 WITH r AS (
     SELECT s.*,
            to_jsonb(s) - ARRAY['batch_id', 'source_file', 'row_num', 'loaded_at'] AS record,
-           row_number() OVER (PARTITION BY lower(trim(s.id)) ORDER BY s.row_num) AS dup_rank
+           row_number() OVER (PARTITION BY COALESCE(staging.try_uuid(s.id)::TEXT, lower(trim(s.id))) ORDER BY s.row_num) AS dup_rank
     FROM raw.customers s
     WHERE s.batch_id = %(batch_id)s
 )
@@ -95,14 +96,14 @@ CROSS JOIN LATERAL (VALUES
         staging.is_blank(r.id) OR staging.is_blank(r.name)),
     ('invalid_uuid', 'id is not a valid UUID: ' || r.id, 'INVALID',
         NOT staging.is_blank(r.id) AND staging.try_uuid(r.id) IS NULL),
-    ('duplicate_key', 'id appears more than once in the file (first kept)', 'INVALID',
+    ('duplicate_key', 'id appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.id))
 ) AS c(rule_name, reason, category, failed)
 WHERE c.failed;
 
 INSERT INTO staging.customers (customer_id, customer_name, batch_id)
 SELECT staging.try_uuid(s.id),
-       regexp_replace(trim(s.name), '\s+', ' ', 'g'),
+       btrim(regexp_replace(s.name, '\s+', ' ', 'g')),
        s.batch_id
 FROM raw.customers s
 WHERE s.batch_id = %(batch_id)s
@@ -113,7 +114,8 @@ ON CONFLICT (customer_id) DO UPDATE
 SET customer_name = EXCLUDED.customer_name,
     batch_id      = EXCLUDED.batch_id,
     updated_at    = now()
-WHERE staging.customers.customer_name IS DISTINCT FROM EXCLUDED.customer_name;
+WHERE staging.customers.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND staging.customers.customer_name IS DISTINCT FROM EXCLUDED.customer_name;
 
 
 -- =====================================================================
@@ -137,14 +139,18 @@ CROSS JOIN LATERAL (VALUES
         NOT staging.is_blank(r.price) AND staging.try_bigint(r.price) IS NULL),
     ('negative_amount', 'price cannot be negative: ' || r.price, 'INVALID',
         staging.try_bigint(r.price) < 0),
-    ('duplicate_key', 'sku appears more than once in the file (first kept)', 'INVALID',
+    ('amount_out_of_range', 'price is above 9999999999 cents: ' || r.price, 'INVALID',
+        staging.try_bigint(r.price) > 9999999999),
+    ('invalid_key', 'sku is longer than 50 characters', 'INVALID',
+        length(trim(r.sku)) > 50),
+    ('duplicate_key', 'sku appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.sku))
 ) AS c(rule_name, reason, category, failed)
 WHERE c.failed;
 
 INSERT INTO staging.products (sku, product_name, product_type, price, description, batch_id)
 SELECT upper(trim(s.sku)),
-       regexp_replace(trim(s.name), '\s+', ' ', 'g'),
+       btrim(regexp_replace(s.name, '\s+', ' ', 'g')),
        lower(trim(s.type)),
        staging.try_bigint(s.price) / 100.0,
        NULLIF(trim(s.description), ''),
@@ -161,7 +167,8 @@ SET product_name = EXCLUDED.product_name,
     description  = EXCLUDED.description,
     batch_id     = EXCLUDED.batch_id,
     updated_at   = now()
-WHERE (staging.products.product_name, staging.products.product_type,
+WHERE staging.products.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND (staging.products.product_name, staging.products.product_type,
        staging.products.price, staging.products.description)
       IS DISTINCT FROM (EXCLUDED.product_name, EXCLUDED.product_type,
                         EXCLUDED.price, EXCLUDED.description);
@@ -189,10 +196,14 @@ CROSS JOIN LATERAL (VALUES
         NOT staging.is_blank(r.cost) AND staging.try_bigint(r.cost) IS NULL),
     ('negative_amount', 'cost cannot be negative: ' || r.cost, 'INVALID',
         staging.try_bigint(r.cost) < 0),
+    ('amount_out_of_range', 'cost is above 9999999999 cents: ' || r.cost, 'INVALID',
+        staging.try_bigint(r.cost) > 9999999999),
+    ('invalid_key', 'id or sku is longer than 50 characters', 'INVALID',
+        length(trim(r.id)) > 50 OR length(trim(r.sku)) > 50),
     ('invalid_boolean', 'perishable must be True or False: ' || r.perishable, 'INVALID',
         NOT staging.is_blank(r.perishable)
         AND lower(trim(r.perishable)) NOT IN ('true', 'false', 't', 'f', '1', '0', 'yes', 'no')),
-    ('duplicate_key', 'id + sku appears more than once in the file (first kept)', 'INVALID',
+    ('duplicate_key', 'id + sku appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.id) AND NOT staging.is_blank(r.sku)),
     ('unknown_product', 'sku not found in products: ' || r.sku, 'INVESTIGATE',
         NOT staging.is_blank(r.sku)
@@ -203,7 +214,7 @@ WHERE c.failed;
 INSERT INTO staging.supplies (supply_id, sku, supply_name, cost, is_perishable, batch_id)
 SELECT upper(trim(s.id)),
        upper(trim(s.sku)),
-       regexp_replace(trim(s.name), '\s+', ' ', 'g'),
+       btrim(regexp_replace(s.name, '\s+', ' ', 'g')),
        staging.try_bigint(s.cost) / 100.0,
        trim(s.perishable)::BOOLEAN,
        s.batch_id
@@ -218,7 +229,8 @@ SET supply_name   = EXCLUDED.supply_name,
     is_perishable = EXCLUDED.is_perishable,
     batch_id      = EXCLUDED.batch_id,
     updated_at    = now()
-WHERE (staging.supplies.supply_name, staging.supplies.cost, staging.supplies.is_perishable)
+WHERE staging.supplies.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND (staging.supplies.supply_name, staging.supplies.cost, staging.supplies.is_perishable)
       IS DISTINCT FROM (EXCLUDED.supply_name, EXCLUDED.cost, EXCLUDED.is_perishable);
 
 
@@ -228,7 +240,7 @@ WHERE (staging.supplies.supply_name, staging.supplies.cost, staging.supplies.is_
 WITH r AS (
     SELECT s.*,
            to_jsonb(s) - ARRAY['batch_id', 'source_file', 'row_num', 'loaded_at'] AS record,
-           row_number() OVER (PARTITION BY lower(trim(s.id)) ORDER BY s.row_num) AS dup_rank,
+           row_number() OVER (PARTITION BY COALESCE(staging.try_uuid(s.id)::TEXT, lower(trim(s.id))) ORDER BY s.row_num) AS dup_rank,
            staging.try_uuid(s.customer)       AS v_customer,
            staging.try_uuid(s.store_id)       AS v_store,
            staging.try_timestamp(s.ordered_at) AS v_ordered_at,
@@ -259,7 +271,9 @@ CROSS JOIN LATERAL (VALUES
         OR (NOT staging.is_blank(r.order_total) AND r.v_total IS NULL)),
     ('negative_amount', 'amounts cannot be negative', 'INVALID',
         r.v_subtotal < 0 OR r.v_tax < 0 OR r.v_total < 0),
-    ('duplicate_key', 'order id appears more than once in the file (first kept)', 'INVALID',
+    ('amount_out_of_range', 'amounts must not exceed 9999999999 cents', 'INVALID',
+        r.v_subtotal > 9999999999 OR r.v_tax > 9999999999 OR r.v_total > 9999999999),
+    ('duplicate_key', 'order id appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.id)),
 
     -- INVESTIGATE: may be valid, needs a person to check
@@ -273,11 +287,11 @@ CROSS JOIN LATERAL (VALUES
         EXISTS (SELECT 1 FROM staging.stores st
                 WHERE st.store_id = r.v_store AND r.v_ordered_at < st.opened_at)),
     ('total_mismatch', 'subtotal + tax_paid differs from order_total by more than 1 cent', 'INVESTIGATE',
-        abs(r.v_subtotal + r.v_tax - r.v_total) > 1),
+        abs(r.v_subtotal::NUMERIC + r.v_tax - r.v_total) > 1),
 
     -- EXCEPTION: legitimate but unusual, loaded and flagged
     ('total_rounding', 'subtotal + tax_paid differs from order_total by 1 cent (rounding)', 'EXCEPTION',
-        abs(r.v_subtotal + r.v_tax - r.v_total) = 1),
+        abs(r.v_subtotal::NUMERIC + r.v_tax - r.v_total) = 1),
     ('zero_value_order', 'order total is zero (for example a free promotion)', 'EXCEPTION',
         r.v_total = 0)
 ) AS c(rule_name, reason, category, failed)
@@ -307,7 +321,8 @@ SET customer_id = EXCLUDED.customer_id,
     order_total = EXCLUDED.order_total,
     batch_id    = EXCLUDED.batch_id,
     updated_at  = now()
-WHERE (staging.orders.customer_id, staging.orders.store_id, staging.orders.ordered_at,
+WHERE staging.orders.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND (staging.orders.customer_id, staging.orders.store_id, staging.orders.ordered_at,
        staging.orders.subtotal, staging.orders.tax_paid, staging.orders.order_total)
       IS DISTINCT FROM (EXCLUDED.customer_id, EXCLUDED.store_id, EXCLUDED.ordered_at,
                         EXCLUDED.subtotal, EXCLUDED.tax_paid, EXCLUDED.order_total);
@@ -319,7 +334,7 @@ WHERE (staging.orders.customer_id, staging.orders.store_id, staging.orders.order
 WITH r AS (
     SELECT s.*,
            to_jsonb(s) - ARRAY['batch_id', 'source_file', 'row_num', 'loaded_at'] AS record,
-           row_number() OVER (PARTITION BY lower(trim(s.id)) ORDER BY s.row_num) AS dup_rank,
+           row_number() OVER (PARTITION BY COALESCE(staging.try_uuid(s.id)::TEXT, lower(trim(s.id))) ORDER BY s.row_num) AS dup_rank,
            staging.try_uuid(s.order_id) AS v_order
     FROM raw.items s
     WHERE s.batch_id = %(batch_id)s
@@ -333,7 +348,7 @@ CROSS JOIN LATERAL (VALUES
     ('invalid_uuid', 'id or order_id is not a valid UUID', 'INVALID',
         (NOT staging.is_blank(r.id) AND staging.try_uuid(r.id) IS NULL)
         OR (NOT staging.is_blank(r.order_id) AND r.v_order IS NULL)),
-    ('duplicate_key', 'item id appears more than once in the file (first kept)', 'INVALID',
+    ('duplicate_key', 'item id appears more than once in the file (later copies rejected)', 'INVALID',
         r.dup_rank > 1 AND NOT staging.is_blank(r.id)),
     ('unknown_order', 'order not found (may arrive late): ' || r.order_id, 'INVESTIGATE',
         r.v_order IS NOT NULL
@@ -359,7 +374,8 @@ SET order_id   = EXCLUDED.order_id,
     sku        = EXCLUDED.sku,
     batch_id   = EXCLUDED.batch_id,
     updated_at = now()
-WHERE (staging.items.order_id, staging.items.sku)
+WHERE staging.items.batch_id <= EXCLUDED.batch_id   -- an older batch never overwrites a newer one
+  AND (staging.items.order_id, staging.items.sku)
       IS DISTINCT FROM (EXCLUDED.order_id, EXCLUDED.sku);
 
 
@@ -367,12 +383,29 @@ WHERE (staging.items.order_id, staging.items.sku)
 -- BATCH STATISTICS  (rows_read was set during ingestion)
 --   rejected = distinct rows with an INVALID or INVESTIGATE rule (incl. malformed)
 --   flagged  = loaded rows that only have EXCEPTION rules
---   accepted = rows_read - rejected
+--   accepted = raw rows of the batch without an INVALID or INVESTIGATE rule,
+--              counted independently so that rows_read = accepted + rejected
+--              is a real check (audit.batch_reconciliation)
 -- =====================================================================
-WITH stats AS (
-    SELECT count(DISTINCT row_num) FILTER (WHERE category <> 'EXCEPTION') AS rejected
+WITH batch_rows AS (
+    SELECT row_num FROM raw.stores    WHERE batch_id = %(batch_id)s UNION ALL
+    SELECT row_num FROM raw.customers WHERE batch_id = %(batch_id)s UNION ALL
+    SELECT row_num FROM raw.products  WHERE batch_id = %(batch_id)s UNION ALL
+    SELECT row_num FROM raw.supplies  WHERE batch_id = %(batch_id)s UNION ALL
+    SELECT row_num FROM raw.orders    WHERE batch_id = %(batch_id)s UNION ALL
+    SELECT row_num FROM raw.items     WHERE batch_id = %(batch_id)s
+),
+accepted AS (
+    SELECT count(*) AS n
+    FROM batch_rows b
+    WHERE NOT EXISTS (SELECT 1 FROM audit.rejected_records x
+                      WHERE x.batch_id = %(batch_id)s AND x.row_num = b.row_num
+                        AND x.category <> 'EXCEPTION')
+),
+rejected AS (
+    SELECT count(DISTINCT row_num) AS n
     FROM audit.rejected_records
-    WHERE batch_id = %(batch_id)s
+    WHERE batch_id = %(batch_id)s AND category <> 'EXCEPTION'
 ),
 flagged AS (
     SELECT count(DISTINCT e.row_num) AS n
@@ -384,8 +417,8 @@ flagged AS (
                         AND x.category <> 'EXCEPTION')
 )
 UPDATE audit.ingestion_log l
-SET rows_rejected = stats.rejected,
-    rows_flagged  = flagged.n,
-    rows_accepted = l.rows_read - stats.rejected
-FROM stats, flagged
+SET rows_accepted = accepted.n,
+    rows_rejected = rejected.n,
+    rows_flagged  = flagged.n
+FROM accepted, rejected, flagged
 WHERE l.batch_id = %(batch_id)s;
