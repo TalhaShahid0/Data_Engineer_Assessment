@@ -22,6 +22,53 @@ CREATE SCHEMA analytics;
 
 
 -- =====================================================================
+-- HELPER FUNCTIONS (used by data_quality.sql)
+-- "Safe casts": return NULL instead of raising an error, so a data-quality
+-- rule can test whether a raw text value is a valid UUID / number / timestamp.
+-- =====================================================================
+
+CREATE FUNCTION staging.is_blank(v TEXT) RETURNS BOOLEAN
+LANGUAGE sql IMMUTABLE AS $$ SELECT COALESCE(TRIM(v), '') = '' $$;
+
+CREATE FUNCTION staging.try_uuid(v TEXT) RETURNS UUID
+LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+    RETURN TRIM(v)::UUID;
+EXCEPTION WHEN others THEN
+    RETURN NULL;
+END $$;
+
+-- Whole numbers only (source amounts are integer cents).
+CREATE FUNCTION staging.try_bigint(v TEXT) RETURNS BIGINT
+LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+    RETURN TRIM(v)::BIGINT;
+EXCEPTION WHEN others THEN
+    RETURN NULL;
+END $$;
+
+CREATE FUNCTION staging.try_numeric(v TEXT) RETURNS NUMERIC
+LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+    RETURN TRIM(v)::NUMERIC;
+EXCEPTION WHEN others THEN
+    RETURN NULL;
+END $$;
+
+-- Requires an ISO date at the start, so words like 'now' or 'today' are rejected.
+CREATE FUNCTION staging.try_timestamp(v TEXT) RETURNS TIMESTAMP
+LANGUAGE plpgsql STABLE AS $$
+BEGIN
+    IF TRIM(v) !~ '^\d{4}-\d{2}-\d{2}' THEN
+        RETURN NULL;
+    END IF;
+    RETURN TRIM(v)::TIMESTAMP;
+EXCEPTION WHEN others THEN
+    RETURN NULL;
+END $$;
+
+
+-- =====================================================================
 -- AUDIT
 -- =====================================================================
 
@@ -312,3 +359,43 @@ CREATE TABLE analytics.monthly_product_sales (
     gross_margin NUMERIC(12, 2) NOT NULL,
     PRIMARY KEY (month, sku)
 );
+
+
+-- =====================================================================
+-- RECONCILIATION (one row per successfully loaded batch)
+--   rows_read  = rows in the source file
+--   counts_balance : rows_read = rows_accepted + rows_rejected
+--   raw_complete   : every source row is in raw, or was rejected as malformed
+-- =====================================================================
+
+CREATE VIEW audit.batch_reconciliation AS
+WITH raw_counts AS (
+    SELECT batch_id, count(*) AS n FROM raw.stores    GROUP BY batch_id UNION ALL
+    SELECT batch_id, count(*)      FROM raw.customers GROUP BY batch_id UNION ALL
+    SELECT batch_id, count(*)      FROM raw.products  GROUP BY batch_id UNION ALL
+    SELECT batch_id, count(*)      FROM raw.supplies  GROUP BY batch_id UNION ALL
+    SELECT batch_id, count(*)      FROM raw.orders    GROUP BY batch_id UNION ALL
+    SELECT batch_id, count(*)      FROM raw.items     GROUP BY batch_id
+),
+malformed AS (
+    SELECT batch_id, count(*) AS n
+    FROM audit.rejected_records
+    WHERE rule_name = 'malformed_row'
+    GROUP BY batch_id
+)
+SELECT l.batch_id,
+       l.table_name,
+       l.file_name,
+       l.rows_read,
+       COALESCE(r.n, 0)  AS rows_in_raw,
+       COALESCE(m.n, 0)  AS rows_malformed,
+       l.rows_accepted,
+       l.rows_rejected,
+       l.rows_flagged,
+       l.rows_read = l.rows_accepted + l.rows_rejected        AS counts_balance,
+       l.rows_read = COALESCE(r.n, 0) + COALESCE(m.n, 0)      AS raw_complete
+FROM audit.ingestion_log l
+LEFT JOIN raw_counts r ON r.batch_id = l.batch_id
+LEFT JOIN malformed  m ON m.batch_id = l.batch_id
+WHERE l.status = 'SUCCESS'
+ORDER BY l.batch_id;

@@ -47,3 +47,11 @@ def fetch_all(conn, query, params=None):
     with conn.cursor() as cur:
         cur.execute(query, params)
         return cur.fetchall()
+
+
+def export_query_to_csv(conn, query, path):
+    """Write the result of a SELECT to a CSV file (with header) using COPY."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with conn.cursor() as cur, open(path, "w", newline="", encoding="utf-8") as f:
+        cur.copy_expert(f"COPY ({query}) TO STDOUT WITH (FORMAT csv, HEADER)", f)
